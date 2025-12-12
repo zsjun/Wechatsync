@@ -6,7 +6,7 @@
           placement="top-start"
           width="500"
           :title="submitting ? '发布中' : '发布到'"
-          v-model="visible"
+          v-model:visible="visible"
           trigger="click"
         >
           <div>
@@ -81,9 +81,9 @@
               >关闭</el-button
             >
           </div>
-          <el-button slot="reference" size="small" type="primary"
-            >同步</el-button
-          >
+          <template #reference>
+            <el-button size="small" type="primary">同步</el-button>
+          </template>
         </el-popover>
       </div>
     </div>
@@ -121,27 +121,17 @@
   </div>
 </template>
 <script>
-var PouchDB = require('pouchdb').default
-
+import PouchDB from 'pouchdb'
+import PouchDBFind from 'pouchdb-find'
 import ClickOutside from 'vue-click-outside'
+import axios from 'axios'
 
-PouchDB.plugin(require('pouchdb-find').default)
-// console.log(PouchDB);
+PouchDB.plugin(PouchDBFind)
 var db = new PouchDB('articles')
 var trash = new PouchDB('trash-articles')
-// db.put({
-//   _id: 'dave@gmail.com',
-//   name: 'David',
-//   age: 69
-// });
 
-// db.changes().on('change', function() {
-//   console.log('Ch-Ch-Changes');
-// });
-
-var service = analytics.getService('syncer')
-var tracker = service.getTracker('UA-48134052-13')
-var axios = require('axios')
+// var service = analytics.getService('syncer')
+// var tracker = service.getTracker('UA-48134052-13')
 
 ;(function ($) {
   $.extend($.fn, {
@@ -247,7 +237,7 @@ export default {
       }
     })
 
-    tracker.sendAppView('ArticleView')
+    // tracker.sendAppView('ArticleView')
   },
   methods: {
     taskUpdate(task) {
@@ -309,7 +299,7 @@ export default {
       var accounts = []
       var self = this
       function getAccounts() {
-        chrome.extension.sendMessage(
+        chrome.runtime.sendMessage(
           {
             action: 'getAccount',
           },
@@ -414,7 +404,7 @@ export default {
 
       this.$message('准备同步')
       setTimeout(() => {
-        chrome.extension.sendMessage(
+        chrome.runtime.sendMessage(
           {
             action: 'addTask',
             task: {
@@ -439,7 +429,6 @@ export default {
   height: 100%;
   width: 350px;
 }
-
 
 .article-all {
   color: #878787;

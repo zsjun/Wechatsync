@@ -136,7 +136,7 @@
 import PouchDB from 'pouchdb'
 import PouchDBFind from 'pouchdb-find'
 import axios from 'axios'
-import { Juejin } from '@wechatsync/drivers'
+import drivers from '@wechatsync/drivers'
 
 PouchDB.plugin(PouchDBFind)
 console.log(PouchDB)
@@ -148,52 +148,6 @@ var trash = new PouchDB('trash-articles')
 
 export default {
   name: '',
-  methods: {
-    formatDate(time) {
-      let oldDate = new Date(time)
-      let newDate = new Date()
-      var dayNum = ''
-      var getTime = (newDate.getTime() - oldDate.getTime()) / 1000
-
-      if (getTime < 60 * 5) {
-        dayNum = '刚刚'
-      } else if (getTime >= 60 * 5 && getTime < 60 * 60) {
-        dayNum = parseInt(getTime / 60) + '分钟前'
-      } else if (getTime >= 3600 && getTime < 3600 * 24) {
-        dayNum = parseInt(getTime / 3600) + '小时前'
-      } else if (getTime >= 3600 * 24 && getTime < 3600 * 24 * 30) {
-        dayNum = parseInt(getTime / 3600 / 24) + '天前'
-      } else if (getTime >= 3600 * 24 * 30 && getTime < 3600 * 24 * 30 * 12) {
-        dayNum = parseInt(getTime / 3600 / 24 / 30) + '个月前'
-      } else if (time >= 3600 * 24 * 30 * 12) {
-        dayNum = parseInt(getTime / 3600 / 24 / 30 / 12) + '年前'
-      }
-
-      let year = oldDate.getFullYear()
-      let month = oldDate.getMonth() + 1
-      let day = oldDate.getDate()
-      let hour = oldDate.getHours()
-      let minute = oldDate.getMinutes()
-      let second = oldDate.getSeconds()
-
-      if (dayNum == '刚刚') return dayNum
-      return (
-        dayNum +
-        ' ' +
-        year +
-        '-' +
-        month +
-        '-' +
-        day +
-        ' ' +
-        hour +
-        ':' +
-        minute +
-        ':' +
-        second
-      )
-    },
-
   data() {
     return {
       visible: false,
@@ -254,6 +208,50 @@ export default {
     })
   },
   methods: {
+    formatDate(time) {
+      let oldDate = new Date(time)
+      let newDate = new Date()
+      var dayNum = ''
+      var getTime = (newDate.getTime() - oldDate.getTime()) / 1000
+
+      if (getTime < 60 * 5) {
+        dayNum = '刚刚'
+      } else if (getTime >= 60 * 5 && getTime < 60 * 60) {
+        dayNum = parseInt(getTime / 60) + '分钟前'
+      } else if (getTime >= 3600 && getTime < 3600 * 24) {
+        dayNum = parseInt(getTime / 3600) + '小时前'
+      } else if (getTime >= 3600 * 24 && getTime < 3600 * 24 * 30) {
+        dayNum = parseInt(getTime / 3600 / 24) + '天前'
+      } else if (getTime >= 3600 * 24 * 30 && getTime < 3600 * 24 * 30 * 12) {
+        dayNum = parseInt(getTime / 3600 / 24 / 30) + '个月前'
+      } else if (time >= 3600 * 24 * 30 * 12) {
+        dayNum = parseInt(getTime / 3600 / 24 / 30 / 12) + '年前'
+      }
+
+      let year = oldDate.getFullYear()
+      let month = oldDate.getMonth() + 1
+      let day = oldDate.getDate()
+      let hour = oldDate.getHours()
+      let minute = oldDate.getMinutes()
+      let second = oldDate.getSeconds()
+
+      if (dayNum == '刚刚') return dayNum
+      return (
+        dayNum +
+        ' ' +
+        year +
+        '-' +
+        month +
+        '-' +
+        day +
+        ' ' +
+        hour +
+        ':' +
+        minute +
+        ':' +
+        second
+      )
+    },
     loadAccounts() {
       var allAccounts = []
       var accounts = []
@@ -418,7 +416,8 @@ export default {
     },
     async imgAdd(pos, $file) {
       // var dri = new Segmentfault();
-      var dri = new JuejinAdapter()
+      const Juejin = drivers.JuejinAdapter
+      var dri = new Juejin()
       var finalUrl = await dri.uploadFileByForm($file)
       // console.log(pos, $file, finalUrl)
       this.$refs.editor.$img2Url(pos, finalUrl)

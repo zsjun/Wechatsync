@@ -1,51 +1,51 @@
 function getCache(name, cb) {
-  chrome.extension.sendMessage(
+  chrome.runtime.sendMessage(
     {
       action: 'getCache',
       name: name,
     },
-    function(resp) {
+    function (resp) {
       cb && cb(resp.result[name])
     }
   )
 }
 
 function getMultiCache(names, cb) {
-  chrome.extension.sendMessage(
+  chrome.runtime.sendMessage(
     {
       action: 'getCache',
       names: names,
     },
-    function(resp) {
+    function (resp) {
       cb && cb(resp.result)
     }
   )
 }
 
 function setCache(name, value, cb) {
-  chrome.extension.sendMessage(
+  chrome.runtime.sendMessage(
     {
       action: 'setCache',
       name: name,
       value: value,
     },
-    function(resp) {
+    function (resp) {
       cb && cb(resp)
     }
   )
 }
 
 function sendEvent(category, action, label) {
-  chrome.extension.sendMessage(
+  chrome.runtime.sendMessage(
     {
       action: 'sendEvent',
       event: {
         category: category,
         action: action,
-        label: label
+        label: label,
       },
     },
-    function(resp) {
+    function (resp) {
       cb && cb(resp)
     }
   )
@@ -54,7 +54,7 @@ function sendEvent(category, action, label) {
 var unsafeWindow
 var sharedTaskStatus = null
 
-setTimeout(function() {
+setTimeout(function () {
   var script = document.createElement('script')
   script.type = 'text/javascript'
   script.innerHTML =
@@ -99,7 +99,7 @@ if (isSinglePage) {
     var post = getPost()
     var html = ''
     accounts = allAccounts
-    var supportAccounts = allAccounts.filter(item => {
+    var supportAccounts = allAccounts.filter((item) => {
       if (!item.supportTypes) return true
       return item.supportTypes.indexOf('html') > -1
     })
@@ -162,7 +162,7 @@ if (isSinglePage) {
     // console.log($('#exampleModalCenter').modal())
     $('#syncd-users').click(checkShareStatus)
   }
-  div.click(function() {
+  div.click(function () {
     getAccounts(() => {
       afterGet()
     })
@@ -242,10 +242,12 @@ var shareInteractioned = false
 
 function afterShareInteraction(type) {
   shareInteractioned = true
-  var label = sharedTaskStatus ? sharedTaskStatus.accounts.map(account => {
-    return [account.type, account.uid, account.title].join('-')
-  }) : 'default';
-  sendEvent('share', type, [label, syncCount].join(";;"))
+  var label = sharedTaskStatus
+    ? sharedTaskStatus.accounts.map((account) => {
+        return [account.type, account.uid, account.title].join('-')
+      })
+    : 'default'
+  sendEvent('share', type, [label, syncCount].join(';;'))
 }
 
 function isTimeToShowShareTip() {
@@ -257,7 +259,7 @@ function isTimeToShowShareTip() {
 function showShareTip() {
   // maybe show sharetip
   if (isTimeToShowShareTip()) {
-    if (hasbeenShared) return;
+    if (hasbeenShared) return
     $('#sharetrigger').click()
     popupShareTime = Date.now()
     // count
@@ -274,13 +276,13 @@ function initShareConfig() {
   var sharText = `文章同步助手 - 一键同步文章到头条、百家号等多达20个渠道，提高内容发布效率，解放生产力！`
 
   shareText.innerHTML = sharText + ' ' + shareUrl
-  shareText.onselect = function() {
+  shareText.onselect = function () {
     afterShareInteraction('share-selected')
   }
 
-  doubanshare.addEventListener('click', function() {
+  doubanshare.addEventListener('click', function () {
     afterShareInteraction('douban-clicked')
-    ~(function() {
+    ~(function () {
       var d = document,
         e = encodeURIComponent,
         s1 = window.getSelection,
@@ -297,7 +299,7 @@ function initShareConfig() {
           '&v=1',
         w = 450,
         h = 330,
-        x = function() {
+        x = function () {
           var openWin = window.open(
             r,
             'douban',
@@ -320,9 +322,9 @@ function initShareConfig() {
     })()
   })
 
-  weiboshare.addEventListener('click', function() {
+  weiboshare.addEventListener('click', function () {
     afterShareInteraction('weibo-clicked')
-    ;(function() {
+    ;(function () {
       var d = document,
         e = encodeURIComponent,
         s1 = window.getSelection,
@@ -337,7 +339,7 @@ function initShareConfig() {
           '%20%40_fun0&source=&sourceUrl=&ralateUid=&message=&uids=&pic=&searchPic=false&content=',
         w = 450,
         h = 330,
-        x = function() {
+        x = function () {
           var openWin = window.open(
             r,
             'weibo',
@@ -366,7 +368,7 @@ function initShareConfig() {
 
 setTimeout(initShareConfig, 200)
 
-chrome.runtime.onMessage.addListener(function(request, sender, sendResponseA) {
+chrome.runtime.onMessage.addListener(function (request, sender, sendResponseA) {
   console.log('content.js revice', request)
   try {
     console.log('revice', request)
@@ -391,7 +393,7 @@ function checkShareStatus() {
   }
 }
 
-getMultiCache([isShareKey, syncCountKey, shareShowedKey], function(result) {
+getMultiCache([isShareKey, syncCountKey, shareShowedKey], function (result) {
   console.log('result', result)
   if (result[isShareKey]) {
     hasbeenShared = true
@@ -410,10 +412,10 @@ function buildStatusHtml(taskStatus) {
   var isNotFirstAppend = $('.alld-pubaccounts').length
   sharedTaskStatus = taskStatus
 
-  var allDoneAccounts = taskStatus.accounts.filter(_ => _.status == 'done')
+  var allDoneAccounts = taskStatus.accounts.filter((_) => _.status == 'done')
   var isAllDone = allDoneAccounts.length == taskStatus.accounts.length
   // console.log('isAllDone', isAllDone, localStorage.getItem('dismiss_donate'))
-  var list = taskStatus.accounts.map(account => {
+  var list = taskStatus.accounts.map((account) => {
     var msg =
       (account.status == 'uploading'
         ? ` <div class="lds-dual-ring"></div>` +
@@ -495,7 +497,7 @@ function buildStatusHtml(taskStatus) {
   }
 }
 
-$('#exampleModalCenter .btn-primary').click(function(e) {
+$('#exampleModalCenter .btn-primary').click(function (e) {
   // var listAccount = $('input[name="submit_check"]')
   // var saccounts = []
   // for (let index = 0; index < listAccount.length; index++) {
@@ -515,7 +517,7 @@ $('#exampleModalCenter .btn-primary').click(function(e) {
     return e.stopPropagation()
   }
 
-  chrome.extension.sendMessage(
+  chrome.runtime.sendMessage(
     {
       action: 'addTask',
       task: {
@@ -523,7 +525,7 @@ $('#exampleModalCenter .btn-primary').click(function(e) {
         accounts: saccounts,
       },
     },
-    function(resp) {
+    function (resp) {
       console.log('addTask return', resp)
     }
   )
@@ -537,11 +539,11 @@ var allAccounts = []
 var accounts = []
 
 function getAccounts(cb) {
-  chrome.extension.sendMessage(
+  chrome.runtime.sendMessage(
     {
       action: 'getAccount',
     },
-    function(resp) {
+    function (resp) {
       allAccounts = resp
       cb && cb()
     }
@@ -569,7 +571,7 @@ function restoreAndAutodCheckd() {
   var checkedAccounts = restoreCheckedState()
   for (let index = 0; index < listAccount.length; index++) {
     const element = listAccount[index]
-    var cAccounts = checkedAccounts.filter(t => {
+    var cAccounts = checkedAccounts.filter((t) => {
       return t.uid == element.value
     })
     if (cAccounts.length) {
@@ -584,7 +586,7 @@ function getAllCheckedAccounts() {
   for (let index = 0; index < listAccount.length; index++) {
     const element = listAccount[index]
     if (element.checked) {
-      var aa = accounts.filter(t => {
+      var aa = accounts.filter((t) => {
         return t.uid == element.value
       })
       console.log(accounts, element.value)
@@ -607,7 +609,7 @@ if (isEditorPage) {
   // intiEditor();
   var script = document.createElement('script')
   script.type = 'text/javascript'
-  script.src = chrome.extension.getURL('autoformat.js')
+  script.src = chrome.runtime.getURL('autoformat.js')
   script.setAttribute('data-url', chrome.runtime.getURL('templates.html'))
   document.head.appendChild(script)
   // document.head.removeChild(script);
@@ -620,7 +622,7 @@ if (isEditorPage) {
       console.log('selected', 0)
       return
     }
-    chrome.extension.sendMessage(
+    chrome.runtime.sendMessage(
       {
         action: 'parseArticle',
         account: {
@@ -630,10 +632,10 @@ if (isEditorPage) {
           msgId: extractUrlValue('appmsgid'),
         },
       },
-      function(resp) {
+      function (resp) {
         editorStatusBar.show()
         $('#syncd-users').html('等待发布...')
-        chrome.extension.sendMessage(
+        chrome.runtime.sendMessage(
           {
             action: 'addTask',
             task: {
@@ -641,7 +643,7 @@ if (isEditorPage) {
               accounts: allChecked,
             },
           },
-          function(resp) {
+          function (resp) {
             console.log('addTask return', resp)
           }
         )
@@ -682,7 +684,7 @@ if (isEditorPage) {
       var html = `
         <h6 style="margin-bottom: 12px">同步助手</h6> <div id="syncform-selectbox" style="padding-left: 5px">`
       accounts = allAccounts
-      var supportAccounts = allAccounts.filter(item => {
+      var supportAccounts = allAccounts.filter((item) => {
         if (!item.supportTypes) return true
         return item.supportTypes.indexOf('html') > -1
       })
@@ -702,7 +704,7 @@ if (isEditorPage) {
   <img src="` +
           (account.icon
             ? account.icon
-            : chrome.extension.getURL('images/wordpress.ico')) +
+            : chrome.runtime.getURL('images/wordpress.ico')) +
           `" class="icon" height="18" style="height: 20px !important">
   ` +
           account.title +
@@ -725,12 +727,8 @@ if (isEditorPage) {
           getAllCheckedAccounts()
           ;(function waitUntil() {
             const confirmDialogs = $('.weui-desktop-dialog__wrp').filter(
-              function() {
-                return (
-                  $(this)
-                    .text()
-                    .indexOf('开始群发后无法撤销') > -1
-                )
+              function () {
+                return $(this).text().indexOf('开始群发后无法撤销') > -1
               }
             )
             if (confirmDialogs.length) {

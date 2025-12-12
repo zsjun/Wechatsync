@@ -1,6 +1,32 @@
 import Sval from 'sval'
 import svalScopes from '@wechatsync/drivers/scopes'
 import moment from 'moment'
+import axios from 'axios'
+
+// Shim jQuery for drivers
+const $ = function(selector) {
+  // Minimal DOM support if needed, or just return empty for safety
+  // console.warn('jQuery($) called with', selector)
+  return []
+}
+$.get = async function(url) {
+  const res = await axios.get(url)
+  return res.data
+}
+$.post = async function(url, data) {
+  const res = await axios.post(url, data)
+  return res.data
+}
+$.ajax = async function(settings) {
+  const config = {
+    url: settings.url,
+    method: settings.type || settings.method || 'GET',
+    data: settings.data,
+    headers: settings.headers
+  }
+  const res = await axios(config)
+  return res.data
+}
 
 export function getSettings() {
   return new Promise((resolve, reject) => {
@@ -30,12 +56,17 @@ function wait(ms) {
 }
 
 function getRuntimeScopes() {
+  // MV3 Service Worker 没有 DOM；用 typeof 防止 ReferenceError
+  const SafeDOMParser = typeof DOMParser !== 'undefined' ? DOMParser : undefined
+  const SafeDocument = typeof document !== 'undefined' ? document : undefined
+  const SafeCryptoJS = typeof CryptoJS !== 'undefined' ? CryptoJS : globalThis.CryptoJS
+
   return {
     ...svalScopes,
     console: console,
     $: $,
-    DOMParser: DOMParser,
-    document: document,
+    DOMParser: SafeDOMParser,
+    document: SafeDocument,
     Blob: Blob,
     Promise: Promise,
     wait: wait,
@@ -46,7 +77,7 @@ function getRuntimeScopes() {
     initializeFrame: initializeFrame,
     requestFrameMethod: requestFrameMethod,
     modifyRequestHeaders: modifyRequestHeaders,
-    CryptoJS: CryptoJS,
+    CryptoJS: SafeCryptoJS,
     helpers: {
       parseTokenAndToHeaders: parseTokenAndToHeaders,
     },
@@ -57,8 +88,9 @@ export function initDevRuntimeEnvironment() {
   const scopes = getRuntimeScopes()
 
   Object.keys(scopes).forEach(key => {
-    if (!window.hasOwnProperty(key)) {
-      window[key] = scopes[key]
+    const g = typeof globalThis !== 'undefined' ? globalThis : window
+    if (g && !Object.prototype.hasOwnProperty.call(g, key)) {
+      g[key] = scopes[key]
     }
   })
 }
@@ -82,14 +114,21 @@ export function getDriverProvider(code) {
   return interpreter.exports
 }
 
-window.initializeDriver = initializeDriver
-// window.getCache = getCache
+// MV3 service worker 环境没有 window；用 globalThis 避免注册时直接 ReferenceError
+try {
+  if (typeof globalThis !== 'undefined') {
+    globalThis.initializeDriver = initializeDriver
+  }
+} catch (e) {
+  // ignore
+}
 
 export function initializeDriver(conf = {}) {
   return new Promise((resolve, reject) => {
     function createDriver(driverRemote) {
       console.log('initializeDriver', driverRemote ? 'remote' : 'local')
-      const code = driverRemote ? driverRemote : window.driver
+      const g = typeof globalThis !== 'undefined' ? globalThis : window
+      const code = driverRemote ? driverRemote : g.driver
       const driver = getDriverProvider(code)
       resolve(driver)
     }
@@ -123,7 +162,10 @@ function getCache(name, cb) {
 var abb = {}
 var frameStack = {}
 
-window.onmessage = e => {
+// Service Worker 环境没有 window；统一挂到 globalThis
+const __global = typeof globalThis !== 'undefined' ? globalThis : window
+// IMPORTANT: keep a leading semicolon / separate statement to avoid `{}` being treated as a call.
+__global.onmessage = (e) => {
   try {
     var action = JSON.parse(e.data)
     if (action.eventId && abb[action.eventId]) {

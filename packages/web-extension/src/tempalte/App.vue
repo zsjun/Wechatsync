@@ -82,31 +82,20 @@
   </el-card>
 </template>
 <script>
-var PouchDB = require('pouchdb').default
-
+import PouchDB from 'pouchdb'
+import PouchDBFind from 'pouchdb-find'
 import ClickOutside from 'vue-click-outside'
-
-PouchDB.plugin(require('pouchdb-find').default)
-// console.log(PouchDB);
-var db = new PouchDB('articles')
-var trash = new PouchDB('trash-articles')
-// db.put({
-//   _id: 'dave@gmail.com',
-//   name: 'David',
-//   age: 69
-// });
-
-// db.changes().on('change', function() {
-//   console.log('Ch-Ch-Changes');
-// });
-
-var service = analytics.getService('syncer')
-var tracker = service.getTracker('UA-48134052-13')
-
-var axios = require('axios')
-
+import axios from 'axios'
 import { Autoformat } from '../util/AutoFormat'
 import Styleditor from './StyleEditor.vue'
+
+PouchDB.plugin(PouchDBFind)
+var db = new PouchDB('articles')
+var trash = new PouchDB('trash-articles')
+
+// var service = analytics.getService('syncer')
+// var tracker = service.getTracker('UA-48134052-13')
+
 export default {
   name: '',
   components: {
@@ -235,7 +224,7 @@ export default {
   mounted() {
     var self = this
     this.currentTemplate = this.templates[0]
-    tracker.sendAppView('ArticleView')
+    // tracker.sendAppView('ArticleView')
   },
   methods: {
     headerChange() {
@@ -374,7 +363,7 @@ export default {
       var accounts = []
       var self = this
       function getAccounts() {
-        chrome.extension.sendMessage(
+        chrome.runtime.sendMessage(
           {
             action: 'getAccount',
           },
@@ -424,7 +413,7 @@ export default {
 
       this.$message('准备同步')
       setTimeout(() => {
-        chrome.extension.sendMessage(
+        chrome.runtime.sendMessage(
           {
             action: 'addTask',
             task: {
@@ -464,7 +453,6 @@ export default {
   height: 100%;
   width: 350px;
 }
-
 
 .article-all {
   color: #878787;
@@ -650,7 +638,7 @@ export default {
 
 .top-tools,
 .post-title {
-  // margin-bottom: 12px;
+  /* margin-bottom: 12px; */
   position: absolute;
   z-index: 1502;
   top: 32px;
@@ -681,7 +669,7 @@ export default {
 }
 
 .all-pubaccounts {
-  // background: #f3f3f3;
+  /* background: #f3f3f3; */
 }
 
 .account-item img {
@@ -689,18 +677,18 @@ export default {
 }
 
 .account-item {
-  // height: 36px;
+  /* height: 36px; */
   line-height: 36px;
   padding: 0 15px;
   font-size: 14px;
 }
 
 .account-item .name-block {
-  // width: 100px;
-  // font-weight: bold;
-  // color: black;
-  // overflow: hidden;
-  // display: inline-block;
+  /* width: 100px; */
+  /* font-weight: bold; */
+  /* color: black; */
+  /* overflow: hidden; */
+  /* display: inline-block; */
 }
 .account-item .message {
   max-width: 300px;

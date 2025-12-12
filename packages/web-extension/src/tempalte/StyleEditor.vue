@@ -174,7 +174,7 @@ export default {
           value = value.replace(def[0].end ? def[0].end : '', '')
         }
         // this.form[ item.name] = value;
-        this.$set(this.form, item.name, value)
+        this.form[item.name] = value
       })
     }
 

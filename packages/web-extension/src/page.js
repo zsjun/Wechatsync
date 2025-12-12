@@ -1,9 +1,4 @@
-console.log(
-  'page.js',
-  ReaderArticleFinderJS,
-  'Readability',
-  Readability
-)
+console.log('page.js', ReaderArticleFinderJS, 'Readability', Readability)
 
 function initPageFetch(isForceShow) {
   if ($('#syncd-pannel').length == 0)
@@ -120,7 +115,7 @@ display: none;">
     try {
       var $reader = new Readability(document.cloneNode(true)).parse()
       console.log('adoptableArticle', $reader)
-    } catch(e) {
+    } catch (e) {
       console.log('Readability.error', e)
     }
     var $article = $(ReaderArticleFinderJS.adoptableArticle().outerHTML)
@@ -203,7 +198,7 @@ display: none;">
 
   function getArticle() {
     // var av = ReaderArticleFinderJS.isReaderModeAvailable();
-    var arcArticle = null;
+    var arcArticle = null
     try {
       arcArticle = new Readability(document.cloneNode(true)).parse()
       // arcArticle = true;
@@ -211,11 +206,11 @@ display: none;">
     } catch (e) {
       console.log('Readability.error', e)
     }
-    return arcArticle;
+    return arcArticle
   }
 
   function hasArticle() {
-    return getArticle() != null;
+    return getArticle() != null
   }
 
   if (isForceShow) {
@@ -228,10 +223,10 @@ display: none;">
           showArticle()
         }
       )
-    } else if(hasArticle()) {
+    } else if (hasArticle()) {
       function allocate() {
-        var $article = getArticle();
-        var $dom = $($article.content);
+        var $article = getArticle()
+        var $dom = $($article.content)
         var thePageData = {
           article: $article.content,
           url: window.location.href,
@@ -258,10 +253,9 @@ display: none;">
       setTimeout(() => {
         allocate()
       }, 1000)
-
     } else {
-      const artitleDoms = $('article');
-      if(artitleDoms.length) {
+      const artitleDoms = $('article')
+      if (artitleDoms.length) {
         function allocate() {
           var thePageData = {
             article: artitleDoms[0].outerHTML,
@@ -274,13 +268,11 @@ display: none;">
             title: document.title,
             rtl: false,
           }
-          console.log(
-            '',
-            $widgetPage,
-            $widgetPage[0],
-            thePageData
+          console.log('', $widgetPage, $widgetPage[0], thePageData)
+          $widgetPage[0].contentWindow.postMessage(
+            JSON.stringify(thePageData),
+            '*'
           )
-          $widgetPage[0].contentWindow.postMessage(JSON.stringify(thePageData), '*')
           widgetDomMain.css('display', 'block')
           $widgetPage[0].contentWindow.postMessage(
             JSON.stringify({ method: 'openPannel' }),
@@ -289,12 +281,11 @@ display: none;">
         }
 
         setTimeout(() => {
-          allocate();
-        }, 1000);
+          allocate()
+        }, 1000)
       } else {
         alert('无法识别到文章')
       }
-      
     }
   } else {
     $('#syncd-pannel').show()
@@ -357,11 +348,7 @@ var methodManager = {
   },
 }
 
-chrome.extension.onRequest.addListener(function (
-  request,
-  sender,
-  sendResponse
-) {
+chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
   if (request.method) {
     methodManager[request.method](request, sender, sendResponse)
   }
@@ -370,37 +357,41 @@ chrome.extension.onRequest.addListener(function (
 // window.frames['uchome-ifrHtmlEditor'].window.frames['HtmlEditor'].document.body.innerHTML
 // window.onload = function() {
 console.log('discuz_cache')
-if (window.location.href.indexOf('loaddraft') > -1 || ( document.referrer && document.referrer.indexOf('loaddraft') > -1)){
-    ;(function loop() {
-    if(window.frames['uchome-ifrHtmlEditor'] || window.e_iframe) {
+if (
+  window.location.href.indexOf('loaddraft') > -1 ||
+  (document.referrer && document.referrer.indexOf('loaddraft') > -1)
+) {
+  ;(function loop() {
+    if (window.frames['uchome-ifrHtmlEditor'] || window.e_iframe) {
       function extractPage(cacheData) {
         // resp.result.discuz_cache
         console.log('extractPage', cacheData)
-        if(document.querySelector('#subject')) {
+        if (document.querySelector('#subject')) {
           console.log('set title')
           document.querySelector('#subject').value = cacheData.title
         } else {
           console.log('no title')
         }
-        if(window.e_iframe) {
-          window.e_iframe.contentWindow.document.body.innerHTML = cacheData.content
+        if (window.e_iframe) {
+          window.e_iframe.contentWindow.document.body.innerHTML =
+            cacheData.content
         } else {
           console.log('not frame')
         }
         // for another
-        if(window.frames['uchome-ifrHtmlEditor']) {
+        if (window.frames['uchome-ifrHtmlEditor']) {
           document.querySelector('#title').value = cacheData.title
           window.frames['uchome-ifrHtmlEditor'].window.frames[
-             'HtmlEditor'
-           ].document.body.innerHTML = cacheData.content
+            'HtmlEditor'
+          ].document.body.innerHTML = cacheData.content
         }
       }
-      chrome.extension.sendMessage(
+      chrome.runtime.sendMessage(
         {
           action: 'getCache',
           name: 'discuz_cache',
         },
-        function(resp) {
+        function (resp) {
           var data = JSON.parse(resp.result.discuz_cache)
           // alert(resp.result.discuz_cache)
           console.log('getCache return', resp)
@@ -412,12 +403,12 @@ if (window.location.href.indexOf('loaddraft') > -1 || ( document.referrer && doc
         }
       )
 
-      return;
+      return
     } else {
       console.log('not found;')
     }
     setTimeout(loop, 500)
-  })();
+  })()
 } else {
   console.log('skip')
 }

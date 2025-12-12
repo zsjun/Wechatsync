@@ -1,4 +1,5 @@
-var compareVer = require('compare-ver')
+import compareVer from 'compare-ver'
+import axios from 'axios'
 
 export default class VersionChecker {
   constructor() {
@@ -7,10 +8,10 @@ export default class VersionChecker {
 
   async loadRemote() {
     try {
-      var data = await $.get(
+      var response = await axios.get(
         'https://wpics.oss-cn-shanghai.aliyuncs.com/version.json'
       )
-      this.remoteStatus = data
+      this.remoteStatus = response.data
     } catch (e) {}
   }
 

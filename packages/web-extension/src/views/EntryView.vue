@@ -298,6 +298,7 @@
 var userInfo = localStorage.getItem('userInfo')
 import VersionChecker from './versionCheckver'
 import { getDriverProvider } from '@/runtime'
+import axios from 'axios'
 
 var loginForm
 var currentVersion = '1.0.12'
@@ -308,27 +309,16 @@ if (userInfo == null) {
     _id: 'unknow',
   }
   console.log('start login')
-  // loginForm = new Guard('5cece8a899346457833c189c', {
-  //   title: '微信同步助手',
-  //   logo: '/images/logo.png',
-  // });
-  // loginForm.on('login', function (userInfo) {
-  //   localStorage.setItem('userInfo', JSON.stringify(userInfo))
-  //   localStorage.setItem('token', JSON.stringify(userInfo.token))
-  // })
-  // loginForm.on('authingUnload', () => {
-  //   console.log('login failed')
-  // })
 } else {
   userInfo = JSON.parse(userInfo)
 }
 
-var winBackgroundPage
-try {
-  if (typeof chrome !== 'undefined' && chrome.extension) {
-    winBackgroundPage = chrome.extension.getBackgroundPage()
-  }
-} catch (e) {}
+// var winBackgroundPage
+// try {
+//   if (typeof chrome !== 'undefined' && chrome.extension) {
+//     winBackgroundPage = chrome.extension.getBackgroundPage()
+//   }
+// } catch (e) {}
 // var db = winBackgroundPage.db;
 
 export default {
@@ -503,12 +493,13 @@ export default {
     },
     async purchaseVip() {
       try {
-        var data = await $.get(
+        var response = await axios.get(
           'http://funapi.gospely.com/wechatsync/purchase?sign=' +
             this.orderSign +
             '&user=' +
             userInfo._id
         )
+        var data = response.data
         if (data.status == 1) {
           alert('您已成为会员')
           localStorage.removeItem('reachLimit')

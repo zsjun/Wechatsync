@@ -53,13 +53,10 @@ function testFunc() {
             for (var k in action.data) {
               a.append(k, action.data[k])
             }
-            var res = await $.ajax({
-              url: '/api/article/draft/save?_=63fefd2c2515dd098e0e0a4a33a8ecd4',
+            var res = await fetch('/api/article/draft/save?_=63fefd2c2515dd098e0e0a4a33a8ecd4', {
               method: 'POST',
-              data: a,
-              processData: !1,
-              contentType: !1,
-            })
+              body: a
+            }).then(r => r.json())
             console.log(res)
             window.parent.postMessage(
               JSON.stringify({

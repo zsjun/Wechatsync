@@ -9,13 +9,13 @@ function testFunc() {
   var eventCb = {}
   function callFunc(msg, cb) {
     msg.eventID = Math.floor(Date.now() + Math.random() * 100)
-    eventCb[msg.eventID] = function(err, res) {
+    eventCb[msg.eventID] = function (err, res) {
       cb(err, res)
     }
     window.postMessage(JSON.stringify(msg), '*')
   }
 
-  poster.getAccounts = function(cb) {
+  poster.getAccounts = function (cb) {
     callFunc(
       {
         method: 'getAccounts',
@@ -27,7 +27,7 @@ function testFunc() {
   var _statueandler = null
   var _consolehandler = null
 
-  poster.addTask = function(task, statueandler, cb) {
+  poster.addTask = function (task, statueandler, cb) {
     _statueandler = statueandler
     callFunc(
       {
@@ -38,7 +38,7 @@ function testFunc() {
     )
   }
 
-  poster.magicCall = function(data, cb) {
+  poster.magicCall = function (data, cb) {
     callFunc(
       {
         method: 'magicCall',
@@ -49,7 +49,7 @@ function testFunc() {
     )
   }
 
-  poster.updateDriver = function(data, cb) {
+  poster.updateDriver = function (data, cb) {
     callFunc(
       {
         method: 'updateDriver',
@@ -59,7 +59,7 @@ function testFunc() {
     )
   }
 
-  poster.startInspect = function(handler, cb) {
+  poster.startInspect = function (handler, cb) {
     _consolehandler = handler
     callFunc(
       {
@@ -69,7 +69,7 @@ function testFunc() {
     )
   }
 
-  poster.uploadImage = function(data, cb) {
+  poster.uploadImage = function (data, cb) {
     callFunc(
       {
         method: 'magicCall',
@@ -80,7 +80,7 @@ function testFunc() {
     )
   }
 
-  window.addEventListener('message', function(evt) {
+  window.addEventListener('message', function (evt) {
     try {
       var action = JSON.parse(evt.data)
       if (action.method && action.method === 'taskUpdate') {
@@ -104,7 +104,7 @@ function testFunc() {
   window.$syncer = poster
 }
 
-setTimeout(function() {
+setTimeout(function () {
   var script = document.createElement('script')
   script.type = 'text/javascript'
   script.innerHTML =
@@ -123,11 +123,11 @@ var allAccounts = []
 var accounts = []
 
 function getAccounts(cb) {
-  chrome.extension.sendMessage(
+  chrome.runtime.sendMessage(
     {
       action: 'getAccount',
     },
-    function(resp) {
+    function (resp) {
       allAccounts = resp
       cb && cb()
     }
@@ -143,7 +143,7 @@ function sendToWindow(msg) {
   window.postMessage(JSON.stringify(msg), '*')
 }
 
-chrome.runtime.onMessage.addListener(function(request, sender, sendResponseA) {
+chrome.runtime.onMessage.addListener(function (request, sender, sendResponseA) {
   try {
     console.log('revice', request)
     if (request.method == 'taskUpdate') {
@@ -175,13 +175,13 @@ var _sensitiveAPIWhiteList = [
   'http://localhost:8080',
 ]
 
-window.addEventListener('message', function(evt) {
+window.addEventListener('message', function (evt) {
   // if (evt.origin == 'https://www.wechatsync.com') {
   // console.log('from page', evt)
   try {
     var action = JSON.parse(evt.data)
     if (action.method == 'getAccounts') {
-      getAccounts(function() {
+      getAccounts(function () {
         sendToWindow({
           eventID: action.eventID,
           result: allAccounts,
@@ -189,12 +189,12 @@ window.addEventListener('message', function(evt) {
       })
     }
     if (action.method == 'addTask') {
-      chrome.extension.sendMessage(
+      chrome.runtime.sendMessage(
         {
           action: 'addTask',
           task: action.task,
         },
-        function(resp) {
+        function (resp) {
           console.log('addTask return', resp)
         }
       )
@@ -207,7 +207,7 @@ window.addEventListener('message', function(evt) {
           methodName: action.methodName,
           data: action.data,
         },
-        function(resp) {
+        function (resp) {
           sendToWindow({
             eventID: action.eventID,
             result: resp,
@@ -223,7 +223,7 @@ window.addEventListener('message', function(evt) {
             action: 'updateDriver',
             data: action.data,
           },
-          function(resp) {
+          function (resp) {
             sendToWindow({
               eventID: action.eventID,
               result: resp,
@@ -237,7 +237,7 @@ window.addEventListener('message', function(evt) {
           {
             action: 'startInspect',
           },
-          function(resp) {
+          function (resp) {
             sendToWindow({
               eventID: action.eventID,
               result: resp,

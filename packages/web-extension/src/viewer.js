@@ -1,25 +1,13 @@
-import Vue from 'vue'
-import VueRouter from 'vue-router'
-import VueMoment from 'vue-moment'
+import { createApp } from 'vue'
+import { createRouter, createWebHashHistory } from 'vue-router'
 import { store } from './store/store'
-
 import Main from './viewer/App.vue'
-
-import ElementUI from 'element-ui'
-import 'element-ui/lib/theme-chalk/index.css'
-
-Vue.use(ElementUI)
-
+import ElementPlus from 'element-plus'
+import 'element-plus/dist/index.css'
 import mavonEditor from 'mavon-editor'
 import 'mavon-editor/dist/css/index.css'
 
-// use
-Vue.use(mavonEditor)
-
-Vue.use(VueRouter)
-Vue.use(VueMoment)
-
-var routes = [
+const routes = [
   {
     path: '/',
     component: Main,
@@ -29,24 +17,14 @@ var routes = [
   },
 ]
 
-var winBackgroundPage = chrome.extension.getBackgroundPage()
-var db = winBackgroundPage.db
-window.db = db
-
-var router = new VueRouter({
+const router = createRouter({
+  history: createWebHashHistory(),
   routes,
 })
-const app = new Vue({
-  router,
-  store,
-})
-app.$mount('#app')
 
-// $(function() {
-//   $("#article").on("click", function(e) {
-//     e.stopPropagation();
-//   });
-//   $(document).on("click", function(e) {
-//     window.parent.postMessage("closeMe", "*");
-//   });
-// });
+const app = createApp(Main)
+app.use(router)
+app.use(store)
+app.use(ElementPlus)
+app.use(mavonEditor)
+app.mount('#app')

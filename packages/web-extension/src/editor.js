@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { store } from './store/store'
+import Store from './db/store'
 
 import Main from './editor/Main.vue'
 
@@ -22,9 +23,8 @@ var routes = [
   },
 ]
 
-// var winBackgroundPage = chrome.extension.getBackgroundPage()
-// var db = winBackgroundPage.db
-// window.db = db
+var db = new Store()
+window.db = db
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -32,7 +32,7 @@ const router = createRouter({
 })
 
 const App = {
-  template: '<router-view />'
+  template: '<router-view />',
 }
 
 const app = createApp(App)

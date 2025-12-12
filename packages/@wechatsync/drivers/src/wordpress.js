@@ -43,7 +43,7 @@ export default class WordpressAdapter {
       params: params,
     })
     console.log('end')
-    res.icon = chrome.extension.getURL('images/wordpress.ico')
+    res.icon = chrome.runtime.getURL('images/wordpress.ico')
     return res
   }
 

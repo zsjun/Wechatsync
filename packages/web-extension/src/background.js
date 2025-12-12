@@ -1,3 +1,5 @@
+import './sw-shim'
+import { modifyRequestHeaders as modifyRequestHeadersMV3 } from './mv3/modifyRequestHeaders'
 import { load } from 'cheerio'
 import './drivers/driverCodePack'
 import Store from './db/store'
@@ -12,6 +14,21 @@ import {
 } from '@/runtime'
 
 import * as localDriver from './drivers/driver'
+
+// Drivers (from @wechatsync/drivers) call `modifyRequestHeaders(...)` as a free identifier.
+// Define it in *module scope* (so bundling keeps it and the identifier resolves),
+// and delegate to MV3 declarativeNetRequest dynamic rules.
+function modifyRequestHeaders(urlPrefix, headers, inspectUrls, handler) {
+  try {
+    const p = modifyRequestHeadersMV3(urlPrefix, headers, inspectUrls, handler)
+    if (p && typeof p.then === 'function') {
+      p.catch((err) => console.warn('[mv3] modifyRequestHeaders failed', err))
+    }
+  } catch (err) {
+    console.warn('[mv3] modifyRequestHeaders failed', err)
+  }
+}
+globalThis.modifyRequestHeaders = modifyRequestHeaders
 
 // Polyfill window for Service Worker
 if (typeof window === 'undefined') {
@@ -63,8 +80,8 @@ function brodcastToWatcher(args) {
   }
 }
 
-var service = analytics.getService('syncer')
-var tracker = service.getTracker('UA-48134052-13')
+// var service = analytics.getService('syncer')
+// var tracker = service.getTracker('UA-48134052-13')
 
 let getDriver = localDriver.getDriver
 let getPublicAccounts = localDriver.getPublicAccounts
@@ -78,11 +95,11 @@ async function setDriver(driver) {
     try {
       users.forEach((publicAccount) => {
         console.log('tracker', publicAccount)
-        tracker.sendEvent(
-          'user',
-          publicAccount.type,
-          [publicAccount.uid, publicAccount.title].join('-')
-        )
+        // tracker.sendEvent(
+        //   'user',
+        //   publicAccount.type,
+        //   [publicAccount.uid, publicAccount.title].join('-')
+        // )
       })
     } catch (e) {
       console.log(e)
@@ -885,45 +902,59 @@ function afterDriver() {
   window.getPublicAccounts = getPublicAccounts
 }
 
+// MV3 Service Worker 环境没有 `process.env`，并且可能没有 DOM（document/DOMParser）。
+// 为避免 Service Worker 注册失败（Status code: 15），启动阶段只做最小初始化。
 ;(async () => {
-  console.log('WECHAT_ENV', process.env.WECHAT_ENV)
-  if (process.env.WECHAT_ENV == 'production') {
-    console.log('load driver')
-    loadDriver()
-  } else {
-    initDevRuntimeEnvironment()
-    window.driverMeta = localDriver.getMeta()
-    afterDriver()
-    console.log('dvelopment driver')
+  try {
+    console.log('MODE', import.meta.env?.MODE, 'PROD', import.meta.env?.PROD)
+  } catch (e) {
+    // ignore
   }
+
+  // 先使用内置 driver meta，确保 service worker 能起来。
+  try {
+    window.driverMeta = localDriver.getMeta()
+  } catch (e) {
+    console.log('getMeta failed', e)
+  }
+
+  // 不在启动阶段执行 initDevRuntimeEnvironment()/loadDriver()，
+  // 这些会在 SW 中引用 document/DOMParser 或依赖动态执行 driver（Sval），容易导致启动即崩。
+  afterDriver()
 })()
 var sharedContextmenuId = null
+var _contextMenuListenerBound = false
+
+function onContextMenuClicked(info, tab) {
+  try {
+    if (!info || info.menuItemId !== 'getAttrile') return
+    if (!tab || typeof tab.id !== 'number') return
+
+    var link = info.linkUrl || info.frameUrl || info.pageUrl
+    chrome.tabs.sendMessage(tab.id, {
+      method: 'fetchArticle',
+      text: tab.title,
+      link: link,
+      info: info,
+    })
+  } catch (e) {
+    console.log('contextMenus.onClicked error', e)
+  }
+}
+
 function createSharedContextmenu() {
   if (!sharedContextmenuId) {
     sharedContextmenuId = chrome.contextMenus.create({
       id: 'getAttrile',
       title: '提取文章并同步',
       contexts: ['all'],
-      onclick: function (info, tab) {
-        // var text = info.selectionText;
-        // text = text || tab.title;
-        var link = info.linkUrl || info.frameUrl || info.pageUrl
-        // var image_rex = /\.(jpg|png|gif|bmp)$/gi;
-        // if (
-        //   link.toLowerCase().indexOf("javascript") === 0 ||
-        //   link === info.srcUrl ||
-        //   image_rex.test(link)
-        // ) {
-        //   link = info.frameUrl || info.pageUrl;
-        // }
-        chrome.tabs.sendRequest(tab.id, {
-          method: 'fetchArticle',
-          text: tab.title,
-          link: link,
-          info: info,
-        })
-      },
     })
+
+    // MV3: cannot pass `onclick` to create(); must use onClicked event.
+    if (!_contextMenuListenerBound) {
+      chrome.contextMenus.onClicked.addListener(onContextMenuClicked)
+      _contextMenuListenerBound = true
+    }
   }
 }
 

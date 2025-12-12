@@ -3,7 +3,7 @@
     <el-tabs v-model="activeName">
       <el-tab-pane name="about">
         <template #label>
-          <span slot="label">
+          <span>
             <i class="el-icon-info"></i>
             关于
           </span>
@@ -36,7 +36,7 @@
       </el-tab-pane>
       <el-tab-pane name="setting">
         <template #label>
-          <span slot="label">
+          <span>
             <i class="el-icon-setting"></i>
             配置
           </span>

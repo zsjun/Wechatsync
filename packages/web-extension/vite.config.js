@@ -6,6 +6,13 @@ import { viteStaticCopy } from 'vite-plugin-static-copy'
 export default defineConfig({
   root: 'src',
   publicDir: '../public',
+  // IMPORTANT:
+  // We rely on adapter class/function `.name` in `@wechatsync/drivers/index.js` to build the driver map.
+  // If esbuild minifies names, code like `drivers[module.default.name] = module.default` will break,
+  // causing runtime errors like "rn is not a constructor" when `SegmentfaultAdapter` becomes undefined.
+  esbuild: {
+    keepNames: true,
+  },
   plugins: [
     vue(),
     viteStaticCopy({
@@ -51,6 +58,8 @@ export default defineConfig({
     preserveSymlinks: true,
   },
   build: {
+    // Service worker environment has no document; disable modulepreload polyfill injection.
+    modulePreload: false,
     outDir: '../dist',
     emptyOutDir: true,
     rollupOptions: {
@@ -71,6 +80,49 @@ export default defineConfig({
         entryFileNames: '[name].js',
         chunkFileNames: 'assets/[name]-[hash].js',
         assetFileNames: 'assets/[name]-[hash].[ext]',
+        // MV3 Service Worker has no `window`/`DOMParser`. Some bundled deps (e.g. turndown)
+        // fall back to Node-only `require("jsdom")` when DOMParser is missing, causing:
+        // "Uncaught ReferenceError: require is not defined".
+        //
+        // Inject a small banner into *every chunk* so the check passes before module init runs.
+        banner: `;(() => {
+  try {
+    if (typeof globalThis.window === 'undefined') globalThis.window = globalThis;
+    if (typeof globalThis.DOMParser === 'undefined') {
+      globalThis.DOMParser = class DOMParser {
+        parseFromString() { return {}; }
+      };
+    }
+    // MV3: provide a global modifyRequestHeaders for legacy drivers.
+    // Implemented via declarativeNetRequest dynamic rules (no blocking webRequest in MV3).
+    if (typeof globalThis.modifyRequestHeaders === 'undefined') {
+      const stableRuleId = (input) => {
+        let h = 2166136261;
+        for (let i = 0; i < input.length; i++) {
+          h ^= input.charCodeAt(i);
+          h = Math.imul(h, 16777619);
+        }
+        return (h >>> 0) % 2147483646 + 1;
+      };
+      globalThis.modifyRequestHeaders = (urlPrefix, headers) => {
+        try {
+          const dnr = globalThis.chrome && globalThis.chrome.declarativeNetRequest;
+          if (!dnr || !dnr.updateDynamicRules) return;
+          const keys = headers ? Object.keys(headers).sort() : [];
+          const ruleId = stableRuleId('hdr:' + urlPrefix + ':' + keys.join(','));
+          const requestHeaders = keys.map((k) => ({ header: k, operation: 'set', value: String(headers[k]) }));
+          const rule = {
+            id: ruleId,
+            priority: 1,
+            action: { type: 'modifyHeaders', requestHeaders },
+            condition: { urlFilter: urlPrefix, resourceTypes: ['xmlhttprequest'] },
+          };
+          dnr.updateDynamicRules({ removeRuleIds: [ruleId], addRules: [rule] }, () => {});
+        } catch (e) {}
+      };
+    }
+  } catch (e) {}
+})();\n`,
       },
     },
   },
