@@ -4,3 +4,4 @@ module.exports = {
     '@commitlint/config-lerna-scopes',
   ],
 }
+

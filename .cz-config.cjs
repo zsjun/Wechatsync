@@ -66,3 +66,4 @@ module.exports = {
   // footerPrefix : 'ISSUES CLOSED:'
   // askForBreakingChangeFirst : true, // default is false
 };
+
