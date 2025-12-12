@@ -4,7 +4,7 @@
       <el-popover
         placement="top-start"
         width="500"
-        v-model="visible"
+        v-model:visible="visible"
         :title="submitting ? '发布中' : '发布到'"
         trigger="click"
       >
@@ -23,62 +23,64 @@
               </el-checkbox>
             </div>
           </div>
-           <div class="all-pubaccounts" v-if="submitting && taskStatus">
-              <p v-if="!taskStatus.accounts">等待发布..</p>
-              <div
-                class="account-item taskStatus"
-                v-for="account in taskStatus.accounts"
+          <div class="all-pubaccounts" v-if="submitting && taskStatus">
+            <p v-if="!taskStatus.accounts">等待发布..</p>
+            <div
+              class="account-item taskStatus"
+              v-for="account in taskStatus.accounts"
+            >
+              <img
+                :src="account.icon ? account.icon : ''"
+                class="icon"
+                height="20"
+                style="vertical-align: -6px; height: 20px !important"
+              />
+              <span class="name-block">{{ account.title }}</span>
+              <span
+                style="margin-left: 15px"
+                :class="account.status + ' message'"
               >
-                <img
-                  :src="account.icon ? account.icon : ''"
-                  class="icon"
-                  height="20"
-                  style="vertical-align: -6px; height: 20px !important"
-                />
-                <span class="name-block">{{ account.title }}</span>
-                <span
-                  style="margin-left: 15px"
-                  :class="account.status + ' message'"
-                >
-                  <template v-if="account.status == 'uploading'">
-                    <div class="lds-dual-ring"></div>
-                    {{ account.msg || '发布中' }}
-                  </template>
+                <template v-if="account.status == 'uploading'">
+                  <div class="lds-dual-ring"></div>
+                  {{ account.msg || '发布中' }}
+                </template>
 
-                  <template v-if="account.status == 'failed'">
-                    同步失败, 错误内容：{{ account.error }}
-                  </template>
+                <template v-if="account.status == 'failed'">
+                  同步失败, 错误内容：{{ account.error }}
+                </template>
 
-                  <template v-if="account.status == 'done' && account.editResp">
-                    同步成功
-                    <a
-                      :href="account.editResp.draftLink"
-                      v-if="account.type != 'wordpress' && account.editResp"
-                      style="margin-left: 5px"
-                      target="_blank"
-                      >查看草稿</a
-                    >
-                  </template>
-                </span>
-              </div>
+                <template v-if="account.status == 'done' && account.editResp">
+                  同步成功
+                  <a
+                    :href="account.editResp.draftLink"
+                    v-if="account.type != 'wordpress' && account.editResp"
+                    style="margin-left: 5px"
+                    target="_blank"
+                    >查看草稿</a
+                  >
+                </template>
+              </span>
             </div>
+          </div>
           <hr />
           <el-button
-              size="small"
-              v-if="!submitting"
-              type="primary"
-              @click="doSubmit"
-              >同步</el-button
-            >
+            size="small"
+            v-if="!submitting"
+            type="primary"
+            @click="doSubmit"
+            >同步</el-button
+          >
           <el-button
-              size="small"
-              v-if="submitting"
-              type="primary"
-              @click="submitting = false"
-              >关闭</el-button
-            >
+            size="small"
+            v-if="submitting"
+            type="primary"
+            @click="submitting = false"
+            >关闭</el-button
+          >
         </div>
-        <el-button slot="reference" size="small" type="primary">发布</el-button>
+        <template #reference>
+          <el-button size="small" type="primary">发布</el-button>
+        </template>
       </el-popover>
     </div>
 
@@ -99,7 +101,7 @@
           <div class="selected-overlay"></div>
           <div class="main-content">
             <div class="title">{{ item.title }}</div>
-            <div class="date">{{ item.updateTime | date }}</div>
+            <div class="date">{{ formatDate(item.updateTime) }}</div>
             <div class="desc">
               {{ item.content.substr(0, 100) }}
             </div>
@@ -131,33 +133,23 @@
   </div>
 </template>
 <script>
-var PouchDB = require('pouchdb').default
+import PouchDB from 'pouchdb'
+import PouchDBFind from 'pouchdb-find'
+import axios from 'axios'
+import { Juejin } from '@wechatsync/drivers'
 
-PouchDB.plugin(require('pouchdb-find').default)
+PouchDB.plugin(PouchDBFind)
 console.log(PouchDB)
 var db = new PouchDB('articles')
 var trash = new PouchDB('trash-articles')
-// db.put({
-//   _id: 'dave@gmail.com',
-//   name: 'David',
-//   age: 69
-// });
 
-// db.changes().on('change', function() {
-//   console.log('Ch-Ch-Changes');
-// });
-
-var service = analytics.getService('syncer')
-var tracker = service.getTracker('UA-48134052-13')
-
-var axios = require('axios')
-
-const Juejin = require("@wechatsync/drivers").Juejin;
+// var service = analytics.getService('syncer')
+// var tracker = service.getTracker('UA-48134052-13')
 
 export default {
   name: '',
-  filters: {
-    date(time) {
+  methods: {
+    formatDate(time) {
       let oldDate = new Date(time)
       let newDate = new Date()
       var dayNum = ''
@@ -201,7 +193,7 @@ export default {
         second
       )
     },
-  },
+
   data() {
     return {
       visible: false,
@@ -244,7 +236,7 @@ export default {
     // if(this.list.length) this.currentArtitle = this.list[0];
     this.loadDoc()
     this.loadAccounts()
-    tracker.sendAppView('MainView')
+    // tracker.sendAppView('MainView')
 
     const self = this
 
@@ -268,7 +260,7 @@ export default {
 
       var self = this
       function getAccounts() {
-        chrome.extension.sendMessage(
+        chrome.runtime.sendMessage(
           {
             action: 'getAccount',
           },
@@ -303,7 +295,7 @@ export default {
       // console.log(selectedAc, this.$refs.editor.d_render);
       // return;
       this.$message('准备同步')
-      chrome.extension.sendMessage(
+      chrome.runtime.sendMessage(
         {
           action: 'addTask',
           task: {

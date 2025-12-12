@@ -30,26 +30,11 @@
   },
   "packageManager": "pnpm@8.15.0",
   "scripts": {
-    "prepare": "husky install",
-    "commit": "cz",
-    "lint:commit": "commitlint --edit",
     "clean": "rm -rf node_modules packages/*/node_modules packages/*/dist packages/*/.vite"
   },
-  "config": {
-    "commitizen": {
-      "path": "node_modules/cz-customizable"
-    }
-  },
   "devDependencies": {
-    "@commitlint/cli": "^19.0.0",
-    "@commitlint/config-conventional": "^19.0.0",
-    "@commitlint/config-lerna-scopes": "^19.0.0",
     "@vitejs/plugin-vue": "^5.2.4",
-    "commitizen": "^4.3.0",
-    "conventional-commit-types": "^3.0.0",
     "cross-env": "^7.0.3",
-    "cz-customizable": "^7.0.0",
-    "husky": "^9.0.0",
     "jsdom": "^24.0.0",
     "jsdom-global": "^3.0.2",
     "sass": "^1.80.0",
