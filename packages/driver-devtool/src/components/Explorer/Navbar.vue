@@ -48,7 +48,7 @@ import {
   addThemeChangeListener,
   removeThemeChangeListener,
 } from '@/utils/theme'
-import featureComponent from '@/assets/FEATURES.md'
+import { VueComponent as featureComponent } from '@/assets/FEATURES.md'
 import { get, set } from '@/utils/localStore'
 
 export default {
@@ -164,7 +164,7 @@ export default {
   }
 }
 .modal {
-  & ::v-deep .modal-container {
+  :deep(.modal-container) {
     background-color: var(--background-color);
     color: var(--font-primary-color);
   }
@@ -192,26 +192,24 @@ export default {
   padding-right: 1em;
   font-size: 1rem;
   line-height: 1.5;
-  & ::v-deep {
-    h1 {
-      font-size: 1.25em;
-    }
-    h2 {
-      font-size: 1.2em;
-    }
-    h3 {
-      font-size: 1.1em;
-    }
-    ul {
-      margin: 0;
-      list-style-type: disc;
-      list-style-position: inside;
-      padding: 0;
-    }
-    hr {
-      border: 1px solid var(--foreground-color);
-      margin: 1em 0;
-    }
+  :deep(h1) {
+    font-size: 1.25em;
+  }
+  :deep(h2) {
+    font-size: 1.2em;
+  }
+  :deep(h3) {
+    font-size: 1.1em;
+  }
+  :deep(ul) {
+    margin: 0;
+    list-style-type: disc;
+    list-style-position: inside;
+    padding: 0;
+  }
+  :deep(hr) {
+    border: 1px solid var(--foreground-color);
+    margin: 1em 0;
   }
 }
 </style>

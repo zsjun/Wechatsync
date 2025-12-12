@@ -2,7 +2,7 @@
   <section id="main-section">
     <header class="float-section-header">
       <a view-ref="back" @click="$router.back()" class="back-btn"
-        ><img src="images/arrow-left.png" style="vertical-align: 0px"
+        ><img src="/images/arrow-left.png" style="vertical-align: 0px"
       /></a>
       同步详情
     </header>
@@ -44,7 +44,7 @@
     <ul class="account-types" v-for="account in taskDetail.accounts">
       <li @click="addWordpress = true" class="media">
         <img
-          :src="account.icon ? account.icon : 'images/wordpress.ico'"
+          :src="account.icon ? account.icon : '/images/wordpress.ico'"
           class="align-self-center mr-3 icon"
           height="35"
         />
@@ -72,9 +72,11 @@ export default {
       taskDetail: {},
     }
   },
-  mounted() {
+  async mounted() {
     console.log(this.$route)
-    this.taskDetail = db.getTask(this.$route.query.id)
+    if (window.db) {
+      this.taskDetail = await window.db.getTask(this.$route.query.id)
+    }
   },
   methods: {},
 }

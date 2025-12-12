@@ -1,22 +1,27 @@
-import Vue from 'vue'
-import VueRouter from 'vue-router'
-import VueMoment from 'vue-moment'
+import { createApp } from 'vue'
+import { createRouter, createWebHashHistory } from 'vue-router'
 import { store } from './store/store'
+import Store from './db/store'
+import App from './App.vue'
 import EntryView from './views/EntryView.vue'
 import Option from './views/Option.vue'
 import AddAccount from './views/AddAccount.vue'
 import TaskDetail from './views/TaskDetail.vue'
-import Mint from 'mint-ui'
-import ElementUI from 'element-ui'
-import 'element-ui/lib/theme-chalk/index.css'
+import ElementPlus from 'element-plus'
+import 'element-plus/dist/index.css'
 
-Vue.use(ElementUI)
+import {
+  initializeDriver,
+  getDriverProvider,
+  initDevRuntimeEnvironment,
+} from '@/runtime'
 
-Vue.use(Mint)
-Vue.use(VueRouter)
-Vue.use(VueMoment)
+initDevRuntimeEnvironment()
 
-var routes = [
+var db = new Store()
+window.db = db
+
+const routes = [
   {
     path: '/options',
     component: Option,
@@ -46,24 +51,15 @@ var routes = [
   },
 ]
 
-import {
-  initializeDriver,
-  getDriverProvider,
-  initDevRuntimeEnvironment,
-} from '@/runtime'
-
-// var serviceFactory = require('./providers/factory')
-initDevRuntimeEnvironment()
-
-var winBackgroundPage = chrome.extension.getBackgroundPage()
-var db = winBackgroundPage.db
-window.db = db
-
-var router = new VueRouter({
+const router = createRouter({
+  history: createWebHashHistory(),
   routes,
 })
-const app = new Vue({
-  router,
-  store,
-})
-app.$mount('#app')
+
+const app = createApp(App)
+
+app.use(router)
+app.use(store)
+app.use(ElementPlus)
+
+app.mount('#app')

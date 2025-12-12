@@ -1,6 +1,6 @@
-@import './normalize.css';
-@import './global.css';
+@use './normalize.css';
+@use './global.css';
 
-@import './theme/codemirror-base.scss';
-@import './theme/codemirror-light.scss';
-@import './theme/codemirror-dark.scss';
+@use './theme/codemirror-base.scss';
+@use './theme/codemirror-light.scss';
+@use './theme/codemirror-dark.scss';

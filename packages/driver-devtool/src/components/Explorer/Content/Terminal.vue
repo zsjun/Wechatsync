@@ -36,6 +36,7 @@
 
 <script>
 import log from '@/utils/log'
+import CodeMirrorComponent from '@/components/CodeMirror.vue'
 import 'codemirror/mode/javascript/javascript.js'
 import 'codemirror/addon/fold/foldgutter.js'
 import 'codemirror/addon/fold/indent-fold.js'
@@ -43,6 +44,9 @@ import 'codemirror/addon/fold/brace-fold.js'
 import 'codemirror/addon/fold/foldgutter.css'
 
 export default {
+  components: {
+    codemirror: CodeMirrorComponent
+  },
   props: {
     theme: String,
   },

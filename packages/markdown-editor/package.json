@@ -4,18 +4,20 @@
   "version": "1.0.0",
   "description": "The Online Markdown Editor for WechatSync",
   "scripts": {
-    "start": "webpack serve",
-    "build": "webpack --env production"
+    "start": "vite",
+    "build": "vite build"
   },
   "dependencies": {
-    "mavon-editor": "^2.7.6",
+    "@vitejs/plugin-vue": "^5.2.4",
+    "element-plus": "^2.12.0",
+    "md-editor-v3": "^6.2.1",
     "pouchdb": "^7.1.1",
     "pouchdb-find": "^7.1.1",
-    "vue": "^2.6.12",
-    "vue-moment": "^4.1.0",
-    "vue-router": "^3.5.1",
-    "vue-spinner": "^1.0.4",
-    "vuex": "^3.6.2"
+    "sass": "^1.80.0",
+    "vite": "^7.0.0",
+    "vue": "3",
+    "vue-router": "4",
+    "vuex": "4"
   },
   "license": "ISC"
 }

@@ -158,7 +158,7 @@ export default {
 .tabbar {
   background-color: var(--foreground-color);
   flex: 1;
-  & ::v-deep li {
+  :deep(li) {
     font-size: 0.875rem;
     border-right: 1px solid var(--line-color);
 

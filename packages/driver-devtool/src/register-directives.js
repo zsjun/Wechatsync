@@ -1,7 +1,8 @@
-import Vue from 'vue'
+export default (app) => {
+  app.directive('focus', {
+    mounted(el) {
+      el.focus()
+    },
+  })
+}
 
-Vue.directive('focus', {
-  inserted: function(el) {
-    el.focus()
-  },
-})

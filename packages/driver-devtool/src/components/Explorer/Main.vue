@@ -5,12 +5,11 @@
     </header>
     <main>
       <split-pane
-        split="vertical"
-        :default-percent="20"
-        :min-percent="0"
-        className="split-pane-resizer"
+        class="default-theme split-pane-resizer"
+        horizontal="false"
+        style="height: 100%"
       >
-        <template slot="paneL">
+        <pane size="20" min-size="0">
           <!-- fix splitpane bug -->
           <sidebar
             :activeId="activeItem.id"
@@ -19,8 +18,8 @@
               height: '100%',
             }"
           />
-        </template>
-        <template slot="paneR">
+        </pane>
+        <pane>
           <!-- fix splitpane bug -->
           <div
             :style="{
@@ -30,7 +29,7 @@
           >
             <content-container :activeId="activeItem.id"></content-container>
           </div>
-        </template>
+        </pane>
       </split-pane>
     </main>
     <footer></footer>

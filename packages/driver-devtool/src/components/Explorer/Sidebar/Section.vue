@@ -15,19 +15,6 @@
         </div>
       </template>
       <template v-slot:default>
-        <v-contextmenu
-          ref="contextmenu"
-          @contextmenu="recordContextMenuTrigger"
-        >
-          <v-contextmenu-item
-            @click="contextMenuTrigger && contextMenuTrigger.startRename()"
-            >重命名</v-contextmenu-item
-          >
-          <v-contextmenu-item
-            @click="contextMenuTrigger && contextMenuTrigger.confirmDelete()"
-            >删除</v-contextmenu-item
-          >
-        </v-contextmenu>
         <ul class="select-list">
           <sidebar-section-item
             v-for="item in items"
@@ -35,9 +22,10 @@
             :name="item.name"
             :id="item.id"
             :active="activeId === item.id"
-            v-contextmenu:contextmenu
+            :ref="(el) => setItemRef(el, item.id)"
+            @contextmenu.prevent="onContextMenu($event, item.id)"
           >
-            <slot name="item" v-bind:id="item.id" />
+            <slot name="item" v-bind="{ id: item.id }" />
           </sidebar-section-item>
         </ul>
         <sidebar-section-item
@@ -55,13 +43,15 @@
 import SidebarSectionItem from './SectionItem.vue'
 import { create } from '@/store/controller/section'
 import { setId as setActiveId } from '@/store/controller/activeItem'
+import ContextMenu from '@imengyu/vue3-context-menu'
+
 export default {
   components: { SidebarSectionItem },
   data() {
     return {
       isAdding: false,
       sectionStyleObject: {},
-      contextMenuTrigger: null,
+      itemRefs: {},
     }
   },
   props: {
@@ -71,8 +61,33 @@ export default {
     idPrefix: String,
   },
   methods: {
-    recordContextMenuTrigger(vNode) {
-      this.contextMenuTrigger = vNode.componentInstance
+    setItemRef(el, id) {
+      if (el) {
+        this.itemRefs[id] = el
+      }
+    },
+    onContextMenu(e, id) {
+      const itemComponent = this.itemRefs[id]
+      if (!itemComponent) return
+
+      ContextMenu.showContextMenu({
+        x: e.x,
+        y: e.y,
+        items: [
+          {
+            label: '重命名',
+            onClick: () => {
+              itemComponent.startRename()
+            },
+          },
+          {
+            label: '删除',
+            onClick: () => {
+              itemComponent.confirmDelete()
+            },
+          },
+        ],
+      })
     },
     adjustHeight(isOpen) {
       this.sectionStyleObject.flex = isOpen ? 1 : 0

@@ -1,5 +1,5 @@
 
-const axios = require('axios')
+import axios from 'axios'
 
 export function readFileToBase64(url) {
   return new Promise((resolve, reject) => {

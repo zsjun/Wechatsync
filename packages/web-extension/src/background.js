@@ -1,4 +1,5 @@
-require("./drivers/driverCodePack");
+import { load } from 'cheerio'
+import './drivers/driverCodePack'
 import Store from './db/store'
 import { upImage } from './util/image'
 
@@ -10,20 +11,29 @@ import {
   initDevRuntimeEnvironment,
 } from '@/runtime'
 
-var localDriver = require('./drivers/driver')
+import * as localDriver from './drivers/driver'
+
+// Polyfill window for Service Worker
+if (typeof window === 'undefined') {
+  self.window = self
+}
 
 window.currentDriver = localDriver
 
+// Mock jQuery for simple usages if needed, or rely on cheerio
+const $ = (content) => {
+  return load(content, { decodeEntities: false }, false)
+}
+
 // index by tabId
 var logWatchers = {}
-
 
 var rawLogFun = console.log
 var _isInjected = false
 
 function startInspectInject() {
   if (_isInjected) return
-  console.log = function() {
+  console.log = function () {
     rawLogFun.apply(null, arguments)
     try {
       var args = [].slice.apply(arguments)
@@ -43,7 +53,7 @@ async function isDisableAddPromotion() {
 function brodcastToWatcher(args) {
   var tabIds = Object.keys(logWatchers)
   for (let index = 0; index < tabIds.length; index++) {
-    const logWatcher = logWatchers[tabIds[index]];
+    const logWatcher = logWatchers[tabIds[index]]
     // console.log('brodcastToWatcher', logWatcher, args)
     chrome.tabs.sendMessage(
       logWatcher.tab.id,
@@ -63,10 +73,10 @@ async function setDriver(driver) {
   window.currentDriver = driver
   window.driverMeta = driver.getMeta()
   getDriver = window.currentDriver.getDriver
-  getPublicAccounts = async function() {
+  getPublicAccounts = async function () {
     var users = await window.currentDriver.getPublicAccounts()
     try {
-      users.forEach(publicAccount => {
+      users.forEach((publicAccount) => {
         console.log('tracker', publicAccount)
         tracker.sendEvent(
           'user',
@@ -113,11 +123,7 @@ async function loadDriver() {
   afterDriver()
 }
 
-
-
 var publicAccounts = []
-
-
 
 var db = new Store()
 window.db = db
@@ -135,7 +141,7 @@ function getCookie(name, cookieStr) {
 }
 
 function wait(ms) {
-  return new Promise(resolve => setTimeout(() => resolve(), ms))
+  return new Promise((resolve) => setTimeout(() => resolve(), ms))
 }
 
 class Syner {
@@ -160,6 +166,7 @@ class Syner {
       insepectURLs = insepectURLs.concat(window.driverMeta.inspectUrls)
     }
 
+    /*
       chrome.webRequest.onBeforeSendHeaders.addListener(
         function(details) {
           console.log('details.requestHeaders', details, details.url)
@@ -264,6 +271,7 @@ class Syner {
         },
         ['blocking', 'requestHeaders', 'extraHeaders',]
       )
+*/
   }
 
   getSender(guid) {
@@ -276,43 +284,60 @@ class Syner {
 
   listenRequest() {
     var self = this
-    chrome.runtime.onMessage.addListener(function(
+    chrome.runtime.onMessage.addListener(function (
       request,
       sender,
       sendResponseA
     ) {
+      if (request.action && request.action == 'getDriverMeta') {
+        sendResponseA(window.driverMeta)
+        return true
+      }
+
+      if (request.action && request.action == 'reloadDriver') {
+        loadDriver().then(() => {
+          sendResponseA({ status: 1 })
+        })
+        return true
+      }
+
       if (request.action && request.action == 'getAccount') {
-        sendResponseA(db.getAccounts().concat(publicAccounts))
         ;(async () => {
+          const accounts = await db.getAccounts()
+          sendResponseA(accounts.concat(publicAccounts))
           // if (request.force) {
           publicAccounts = await getPublicAccounts()
           // }
         })()
+        return true
       }
       if (request.action && request.action == 'addTask') {
         console.log(request)
-        request.task.status = 'wait'
-        request.task.guid = getGuid()
-        db.addTask(request.task)
-        // brocast message to the front end
-        self.senders[request.task.guid] = sender
-        sendResponseA(request.task.guid)
-        try {
-          var newTask = request.task
-          tracker.sendEvent('add', 'link', request.task.post.link)
-          tracker.sendEvent(
-            'add',
-            'title',
-            [
-              request.task.post.title,
-              newTask.accounts.map(account => {
-                return [account.type, account.uid, account.title].join('-')
-              }),
-            ].join(';;')
-          )
-        } catch (e) {
-          console.log(e)
-        }
+        ;(async () => {
+          request.task.status = 'wait'
+          request.task.guid = getGuid()
+          await db.addTask(request.task)
+          // brocast message to the front end
+          self.senders[request.task.guid] = sender
+          sendResponseA(request.task.guid)
+          try {
+            var newTask = request.task
+            tracker.sendEvent('add', 'link', request.task.post.link)
+            tracker.sendEvent(
+              'add',
+              'title',
+              [
+                request.task.post.title,
+                newTask.accounts.map((account) => {
+                  return [account.type, account.uid, account.title].join('-')
+                }),
+              ].join(';;')
+            )
+          } catch (e) {
+            console.log(e)
+          }
+        })()
+        return true
       }
 
       if (request.action && request.action == 'parseArticle') {
@@ -334,14 +359,15 @@ class Syner {
       if (request.action && request.action == 'getCache') {
         console.log(request)
         ;(async () => {
-          chrome.storage.local.get(request.names ? request.names : [request.name], function(
-            result
-          ) {
-            sendResponseA({
-              result: result,
-            })
-          })
-        })();
+          chrome.storage.local.get(
+            request.names ? request.names : [request.name],
+            function (result) {
+              sendResponseA({
+                result: result,
+              })
+            }
+          )
+        })()
         return true
       }
 
@@ -350,10 +376,10 @@ class Syner {
         ;(async () => {
           var d = {}
           d[request.name] = request.value
-          chrome.storage.local.set(d, function() {
+          chrome.storage.local.set(d, function () {
             console.log('cache set')
           })
-        })();
+        })()
         return true
       }
 
@@ -381,30 +407,33 @@ class Syner {
       }
 
       if (request.action && request.action == 'updateDriver') {
-        console.log('updateDriver', request);
-        (async () => {
+        console.log('updateDriver', request)
+        ;(async () => {
           try {
-            var isDevelopment = request.data.dev;
-            var isPatch = request.data.patch;
-            var patchName = request.data.name;
+            var isDevelopment = request.data.dev
+            var isPatch = request.data.patch
+            var patchName = request.data.name
             // var patchName = request.name;
             if (isPatch && isDevelopment) {
               console.log('try patch driver')
               try {
                 var patchCodeVm = getDriverProvider(request.data.code)
-                if(patchCodeVm.driver) {
-                  window.currentDriver.addCustomDriver(patchName, patchCodeVm.driver)
+                if (patchCodeVm.driver) {
+                  window.currentDriver.addCustomDriver(
+                    patchName,
+                    patchCodeVm.driver
+                  )
                   console.log('custom driver seted')
                   sendResponseA({
                     result: {
-                      status: 1
+                      status: 1,
                     },
                   })
                 } else {
                   sendResponseA({
                     result: {
                       error: 'exports.driver not found',
-                      status: 0
+                      status: 0,
                     },
                   })
                 }
@@ -422,12 +451,11 @@ class Syner {
                   result: {
                     error: 'initvm failed',
                     detail: e.toString(),
-                    status: 0
+                    status: 0,
                   },
                 })
                 console.log('initvm failed', e)
               }
-
             }
 
             if (!isPatch) {
@@ -443,7 +471,7 @@ class Syner {
                   {
                     driver: request.data.code,
                   },
-                  function() {
+                  function () {
                     console.log('driver seted')
                     loadDriver()
                   }
@@ -451,27 +479,26 @@ class Syner {
                 console.log('is new driver')
                 sendResponseA({
                   result: {
-                    status: 1
+                    status: 1,
                   },
                 })
-              // } else {
-              //   sendResponseA({
-              //     result: {
-              //     status: 0
-              //   },
-              //   })
-              // }
+                // } else {
+                //   sendResponseA({
+                //     result: {
+                //     status: 0
+                //   },
+                //   })
+                // }
               }
             }
           } catch (e) {
             sendResponseA({
               result: {
                 status: 0,
-                error: e.toString()
+                error: e.toString(),
               },
             })
           }
-
         })()
         return true
       }
@@ -480,11 +507,11 @@ class Syner {
         console.log(request)
         ;(async () => {
           try {
-            var driver = getDriver(request.data.account )
+            var driver = getDriver(request.data.account)
             var methodName = request.methodName
             if (methodName === 'uploadImage') {
               var postId = Math.floor(Math.random() * 100000)
-              var imgSRC = request.data.src;
+              var imgSRC = request.data.src
               var result = await upImage(
                 driver,
                 imgSRC,
@@ -496,7 +523,7 @@ class Syner {
               })
             } else {
               var driverFunc = driver[methodName]
-              if(!driverFunc) {
+              if (!driverFunc) {
                 sendResponseA({
                   error: 'method not exists',
                 })
@@ -521,26 +548,32 @@ class Syner {
   startWroker() {
     var self = this
 
-    ;(function loop() {
-      var tasks = db.getTasks()
+    ;(async function loop() {
+      var tasks = await db.getTasks()
       tasks.forEach((t, tid) => {
         t.tid = tid
       })
-      var notDone = tasks.filter(t => {
+      var notDone = tasks.filter((t) => {
         return t.status == 'wait'
       })
 
       try {
-        chrome.browserAction.setBadgeText({
-          text: notDone.length + '',
-        })
+        if (chrome.action) {
+          chrome.action.setBadgeText({
+            text: notDone.length + '',
+          })
+        } else {
+          chrome.browserAction.setBadgeText({
+            text: notDone.length + '',
+          })
+        }
       } catch (e) {}
 
-      var timeOut = tasks.filter(t => {
+      var timeOut = tasks.filter((t) => {
         return t.status == 'uploading'
       })
 
-      timeOut.forEach(t => {
+      timeOut.forEach((t) => {
         // db.editTask(t.tid, {
         //   status: "failed",
         //   msg: "超时"
@@ -554,7 +587,7 @@ class Syner {
       }
 
       ;(async () => {
-        db.editTask(currentTask.tid, {
+        await db.editTask(currentTask.tid, {
           status: 'uploading',
           startTime: Date.now(),
         })
@@ -573,11 +606,11 @@ class Syner {
                   message: currentTask.post.title + ' >> ' + account.title,
                   iconUrl: 'images/logo.png',
                 },
-                function() {
-                  window.setTimeout(function() {
+                function () {
+                  window.setTimeout(function () {
                     chrome.notifications.clear(
                       'sync_sucess_' + currentTask.tid,
-                      function() {}
+                      function () {}
                     )
                   }, 4000)
                 }
@@ -603,11 +636,11 @@ class Syner {
                   message: msgErro,
                   iconUrl: 'images/logo.png',
                 },
-                function() {
-                  window.setTimeout(function() {
+                function () {
+                  window.setTimeout(function () {
                     chrome.notifications.clear(
                       'sync_error_' + currentTask.tid,
-                      function() {}
+                      function () {}
                     )
                   }, 4000)
                 }
@@ -616,7 +649,7 @@ class Syner {
               account.status = 'failed'
               account.error = msgErro
 
-              db.editTask(currentTask.tid, {
+              await db.editTask(currentTask.tid, {
                 accounts: currentTask.accounts,
               })
 
@@ -636,7 +669,7 @@ class Syner {
           }
         } catch (e) {
           console.log(e)
-          db.editTask(currentTask.tid, {
+          await db.editTask(currentTask.tid, {
             status: 'failed',
             msg: e + '',
           })
@@ -650,7 +683,7 @@ class Syner {
     var driver = getDriver(account)
     var postId
     account.status = 'uploading'
-    db.editTask(currentTask.tid, {
+    await db.editTask(currentTask.tid, {
       accounts: currentTask.accounts,
     })
 
@@ -687,7 +720,9 @@ class Syner {
         {
           post_title: postContent.title,
           post_author: account.params ? account.params.wpUser : '',
-          post_content:  postContent[`content_${account.type}`] ?  postContent[`content_${account.type}`] : postContent.content,
+          post_content: postContent[`content_${account.type}`]
+            ? postContent[`content_${account.type}`]
+            : postContent.content,
         },
         postContent
       ),
@@ -778,9 +813,7 @@ class Syner {
     }
 
     console.log('upload images done')
-    postContent.content = $('<div>')
-      .append(doc.clone())
-      .html()
+    postContent.content = $('<div>').append(doc.clone()).html()
 
     // 设置缩略图
     var post_thumbnail = null
@@ -819,7 +852,7 @@ class Syner {
     try {
       editResp = await driver.editPost(
         finalPostId,
-        Object.assign(postContent, editInput),
+        Object.assign(postContent, editInput)
       )
     } catch (e) {
       console.log('editPost failed：', e)
@@ -858,12 +891,12 @@ function afterDriver() {
     console.log('load driver')
     loadDriver()
   } else {
-    initDevRuntimeEnvironment();
+    initDevRuntimeEnvironment()
     window.driverMeta = localDriver.getMeta()
     afterDriver()
     console.log('dvelopment driver')
   }
-})();
+})()
 var sharedContextmenuId = null
 function createSharedContextmenu() {
   if (!sharedContextmenuId) {
@@ -871,7 +904,7 @@ function createSharedContextmenu() {
       id: 'getAttrile',
       title: '提取文章并同步',
       contexts: ['all'],
-      onclick: function(info, tab) {
+      onclick: function (info, tab) {
         // var text = info.selectionText;
         // text = text || tab.title;
         var link = info.linkUrl || info.frameUrl || info.pageUrl
@@ -902,7 +935,6 @@ function removeSharedContextmenu() {
 }
 
 createSharedContextmenu()
-
 
 // chrome.tabs.executeScript(
 //   tab.id,

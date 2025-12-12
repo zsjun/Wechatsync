@@ -1,0 +1,49 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        { "header": "Origin", "operation": "set", "value": "https://mp.weixin.qq.com" },
+        { "header": "Referer", "operation": "set", "value": "https://mp.weixin.qq.com/cgi-bin/appmsg" }
+      ]
+    },
+    "condition": { "urlFilter": "mp.weixin.qq.com/cgi-bin", "resourceTypes": ["xmlhttprequest"] }
+  },
+  {
+    "id": 2,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        { "header": "Origin", "operation": "set", "value": "https://mp.toutiao.com" },
+        { "header": "Referer", "operation": "set", "value": "https://mp.toutiao.com/profile_v4/graphic/publish" }
+      ]
+    },
+    "condition": { "urlFilter": "mp.toutiao.com/mp", "resourceTypes": ["xmlhttprequest"] }
+  },
+  {
+    "id": 3,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        { "header": "Origin", "operation": "set", "value": "https://card.weibo.com" },
+        { "header": "Referer", "operation": "set", "value": "https://card.weibo.com/article/v3/editor" }
+      ]
+    },
+    "condition": { "urlFilter": "https://card.weibo.com/article/v3", "resourceTypes": ["xmlhttprequest"] }
+  },
+  {
+    "id": 4,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        { "header": "Origin", "operation": "set", "value": "https://member.bilibili.com" }
+      ]
+    },
+    "condition": { "urlFilter": "https://api.bilibili.com/x/article/creative/draft/addupdate", "resourceTypes": ["xmlhttprequest"] }
+  }
+]

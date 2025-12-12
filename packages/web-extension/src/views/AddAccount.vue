@@ -6,14 +6,12 @@
       </a>
       添加账号
     </header>
-    <div style="
-    background: #e91e63;
-    color: #efefef;
-    padding: 5px 0;
-"><p class=" ml-3 mb-0">
-      除WordPress、Typecho平台外
-      <br>其它平台只要在当前浏览器登录过即可被识别到账号，无需在此添加
-    </p></div>
+    <div style="background: #e91e63; color: #efefef; padding: 5px 0">
+      <p class="ml-3 mb-0">
+        除WordPress、Typecho平台外
+        <br />其它平台只要在当前浏览器登录过即可被识别到账号，无需在此添加
+      </p>
+    </div>
     <ul class="account-types" style="padding-bottom: 53px" v-if="!type">
       <li @click="add(driver.type)" v-for="driver in drivers">
         <img :src="driver.icon" class="icon" height="20" />
@@ -24,8 +22,18 @@
         <img src="/images/arrow-right-light.png" style="float: right" />
       </li>
       <p class="mt-2 mb-2 ml-3">
-        <a href="https://www.wechatsync.com/?utm_source=extension-add-accoun#supports" target="_blank" class="mt-2 btn btn-outline-secondary">所有支持平台</a>
-        <a href="https://developer.wechatsync.com/?utm_source=extension-add-account" target="_blank" class="mt-2 ml-3 btn btn-info">添加平台</a>
+        <a
+          href="https://www.wechatsync.com/?utm_source=extension-add-accoun#supports"
+          target="_blank"
+          class="mt-2 btn btn-outline-secondary"
+          >所有支持平台</a
+        >
+        <a
+          href="https://developer.wechatsync.com/?utm_source=extension-add-account"
+          target="_blank"
+          class="mt-2 ml-3 btn btn-info"
+          >添加平台</a
+        >
       </p>
     </ul>
     <div
@@ -78,11 +86,7 @@
 </template>
 
 <script>
-// import { getDriver } from '../drivers/driver'
-
-var winBackgroundPage = chrome.extension.getBackgroundPage()
-var db = winBackgroundPage.db
-
+import { getDriverProvider } from '@/runtime'
 
 export default {
   data() {
@@ -124,15 +128,13 @@ export default {
         {
           type: 'toutiao',
           home: 'https://mp.toutiao.com/profile_v3/graphic/publish',
-          icon:
-            'https://sf1-ttcdn-tos.pstatp.com/obj/ttfe/pgcfe/sz/mp_logo.png',
+          icon: 'https://sf1-ttcdn-tos.pstatp.com/obj/ttfe/pgcfe/sz/mp_logo.png',
           name: '头条',
         },
         {
           type: 'jianshu',
           home: 'https://www.jianshu.com/settings/basic',
-          icon:
-            'https://cdn2.jianshu.io/assets/favicons/favicon-e743bfb1821442341c3ab15bdbe804f7ad97676bd07a770ccc9483473aa76f06.ico',
+          icon: 'https://cdn2.jianshu.io/assets/favicons/favicon-e743bfb1821442341c3ab15bdbe804f7ad97676bd07a770ccc9483473aa76f06.ico',
           name: '简书',
         },
         // {
@@ -170,65 +172,57 @@ export default {
     },
     async create() {
       var self = this
-      var driver = winBackgroundPage.currentDriver.getDriver({
+      var account = {
         type: this.type,
         params: {
           wpUrl: this.wpUrl,
           wpUser: this.wpUser,
           wpPwd: this.wpPwd,
         },
-      })
+      }
 
       this.checking = true
-      // var resp = await driver.getMetaData()
-      driver
-        .getMetaData()
-        .then(
-          function (blogs) {
-            var blogMeta = blogs.response[0][0]
-            db.addAccount({
-              uid: self.wpUrl,
-              type: self.type,
-              params: {
-                wpUrl: self.wpUrl,
-                wpUser: self.wpUser,
-                wpPwd: self.wpPwd,
-                meta: blogMeta,
-              },
-              title: blogMeta.blogName,
-            })
-            alert('添加成功->' + blogMeta.blogName)
-            self.checking = false
-            self.$router.back()
-          },
-          function (res) {
-            const {error, jqXHR, status } = res
-            self.checking = false
-            // console.log('getMetaData', res)
-            if(status == 'error') {
-              alert(jqXHR.responseText)
-              return
-            }
 
-            if (jqXHR.status == 'parsererror') {
-              if (jqXHR.error.code == 403) {
-                alert('账号或密码错误')
-              } else {
-                alert(error.msg)
-              }
-            } else {
-              if (jqXHR.error == 'Not Found') {
-                alert('地址不对，非WordPress网站')
-              } else {
-                alert(JSON.stringify(jqXHR.error))
-              }
-            }
+      chrome.runtime.sendMessage(
+        {
+          action: 'callDriverMethod',
+          methodName: 'getMetaData',
+          data: {
+            account: account,
+          },
+        },
+        (response) => {
+          if (response.error) {
+            self.checking = false
+            alert(response.error)
+            return
           }
-        )
-        // .catch((er) => {
-        //   alert(er.toString())
-        //   console.log('error')
-        // })
+
+          var blogs = response.result
+          try {
+            var blogMeta = blogs.response[0][0]
+            ;(async () => {
+              await window.db.addAccount({
+                uid: self.wpUrl,
+                type: self.type,
+                params: {
+                  wpUrl: self.wpUrl,
+                  wpUser: self.wpUser,
+                  wpPwd: self.wpPwd,
+                  meta: blogMeta,
+                },
+                title: blogMeta.blogName,
+              })
+              alert('添加成功->' + blogMeta.blogName)
+              self.checking = false
+              self.$router.back()
+            })()
+          } catch (e) {
+            self.checking = false
+            alert(e.toString())
+          }
+        }
+      )
     },
   },
 }

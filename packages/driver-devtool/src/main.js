@@ -1,18 +1,16 @@
-import './plugins'
-import './register-icons'
-import './register-components'
-import './register-directives'
+import registerIcons from './register-icons'
+import registerComponents from './register-components'
+import registerDirectives from './register-directives'
 
-import Vue from 'vue'
+import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router'
 
-Vue.config.productionTip = false
-Vue.config.devtools = true
+const app = createApp(App)
 
-const app = new Vue({
-  router,
-  ...App,
-})
+registerIcons(app)
+registerComponents(app)
+registerDirectives(app)
 
-app.$mount('#app')
+app.use(router)
+app.mount('#app')

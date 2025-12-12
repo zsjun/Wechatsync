@@ -56,7 +56,12 @@ import {
 } from '@/utils/debug'
 
 import { changeProperty, isAdapter } from '@/store/controller/section'
+import CodeMirrorComponent from '@/components/CodeMirror.vue'
+
 export default {
+  components: {
+    codemirror: CodeMirrorComponent
+  },
   props: {
     active: Object,
     theme: String,

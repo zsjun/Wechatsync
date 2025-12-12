@@ -4,21 +4,25 @@
   "version": "0.1.0",
   "description": "The Devtool for Custom Edit Driver",
   "scripts": {
-    "start": "webpack serve",
-    "build": "webpack --env production"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
   },
   "author": "fun",
   "license": "ISC",
   "dependencies": {
+    "@imengyu/vue3-context-menu": "^1.5.2",
+    "codemirror": "^5.65.0",
     "gray-matter": "^4.0.2",
     "marked": "^2.0.1",
-    "v-contextmenu": "^2.9.0",
-    "vue": "^2.6.12",
-    "vue-awesome": "^4.1.0",
-    "vue-codemirror": "^4.0.6",
-    "vue-router": "^3.5.1",
-    "vue-runtime-helpers": "^1.1.2",
-    "vue-splitpane": "^1.0.6",
-    "vue2-perfect-scrollbar": "^1.5.0"
+    "oh-vue-icons": "1.0.0-rc3",
+    "splitpanes": "^4.0.4",
+    "vue": "^3.5.25",
+    "vue-router": "^4.6.3",
+    "vue3-perfect-scrollbar": "^2.0.0"
+  },
+  "devDependencies": {
+    "sass": "^1.80.0",
+    "vite-plugin-markdown": "^2.2.0"
   }
 }

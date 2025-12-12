@@ -78,12 +78,7 @@
       v-if="!extensionInstalled"
       style="padding-top: 80px; padding-left: 10px"
     >
-      <scale-loader
-        class="loading"
-        style="margin-top: 80px; margin-bottom: 10px"
-        :loading="true"
-        color="black"
-      ></scale-loader>
+      <div v-loading="true" style="height: 100px"></div>
       <div v-if="checkCount > 3">
         未检测到插件<br />
         请安装同步助手Chrome插件
@@ -97,7 +92,7 @@
         <el-popover
           placement="top-start"
           width="500"
-          v-model="visible"
+          v-model:visible="visible"
           :title="submitting ? '发布中' : '发布到'"
           trigger="click"
         >
@@ -171,21 +166,55 @@
               >关闭</el-button
             >
           </div>
-          <el-button slot="reference" size="small" type="primary"
-            >同步发布</el-button
-          >
+          <template #reference>
+            <el-button size="small" type="primary">同步发布</el-button>
+          </template>
         </el-popover>
       </div>
 
       <div class="article-list">
         <div class="top-tools">
-          <button
-            class="btn btn-sm btn-success"
-            type="button"
-            @click="create()"
+          <el-popover
+            placement="bottom"
+            width="400"
+            v-model:visible="visible"
+            trigger="click"
           >
-            新文章
-          </button>
+            <div>
+              <div class="all-pubaccounts">
+                <div
+                  class="account-item"
+                  v-for="account in allAccounts"
+                  :key="account.uid"
+                >
+                  <el-checkbox v-model="account.checked">
+                    <img :src="account.thumb" width="20" height="20" />
+                    {{ account.name }}
+                    <span
+                      style="color: #aaa; font-size: 12px; margin-left: 5px"
+                    >
+                      {{ account.type }}
+                    </span>
+                  </el-checkbox>
+                </div>
+              </div>
+              <div style="text-align: right; margin: 10px 0 0">
+                <el-button size="small" type="text" @click="visible = false"
+                  >取消</el-button
+                >
+                <el-button
+                  type="primary"
+                  size="small"
+                  @click="doSubmit"
+                  :loading="submitting"
+                  >确定</el-button
+                >
+              </div>
+            </div>
+            <template #reference>
+              <el-button size="small" type="primary" round>发布到</el-button>
+            </template>
+          </el-popover>
         </div>
         <div class="article-all">
           <div
@@ -198,7 +227,7 @@
             <div class="selected-overlay"></div>
             <div class="main-content">
               <div class="title">{{ item.title }}</div>
-              <div class="date">{{ item.updateTime | date }}</div>
+              <div class="date">{{ formatDate(item.updateTime) }}</div>
               <div class="desc">
                 {{ item.content.substr(0, 100) }}
               </div>
@@ -221,44 +250,30 @@
             class="form-control"
           />
         </div>
-        <mavon-editor
+        <MdEditor
           ref="editor"
-          @imgAdd="imgAdd"
-          :boxShadow="false"
+          @onUploadImg="onUploadImg"
+          @onHtmlChanged="onHtmlChanged"
           v-model="currentArtitle.content"
         >
-          <template slot="right-toolbar-before">
-            <!-- <button>
-              view wechat   
-            </button>  -->
+          <template #defToolbars>
+            <!-- Custom toolbar if needed -->
           </template>
-        </mavon-editor>
+        </MdEditor>
       </div>
     </div>
   </div>
 </template>
 <script>
-var PouchDB = require('pouchdb').default
+import PouchDB from 'pouchdb'
+import PouchDBFind from 'pouchdb-find'
+import { config } from 'md-editor-v3'
+import axios from 'axios'
 
-PouchDB.plugin(require('pouchdb-find').default)
+PouchDB.plugin(PouchDBFind)
 console.log(PouchDB)
 var db = new PouchDB('articles')
 var trash = new PouchDB('trash-articles')
-// db.put({
-//   _id: 'dave@gmail.com',
-//   name: 'David',
-//   age: 69
-// });
-
-// db.changes().on('change', function() {
-//   console.log('Ch-Ch-Changes');
-// });
-
-// var service = analytics.getService('syncer')
-// var tracker = service.getTracker('UA-48134052-13')
-
-var axios = require('axios')
-// import Juejin from '../drivers/juejin'
 
 const toBase64 = (file) =>
   new Promise((resolve, reject) => {
@@ -268,12 +283,84 @@ const toBase64 = (file) =>
     reader.onerror = (error) => reject(error)
   })
 
-import ScaleLoader from 'vue-spinner/src/ScaleLoader.vue'
 export default {
-  name: '',
-  components: { ScaleLoader },
-  filters: {
-    date(time) {
+  name: 'Main',
+  components: {},
+  data() {
+    return {
+      visible: false,
+      submitting: false,
+      list: [
+        // {
+        //   id: 0,
+        //   title: "MRC question1",
+        //   date: "19/1/10",
+        //   desc: "navigator.battery navigator.getBattery()"
+        // },
+        // {
+        //   id:  1,
+        //   title: "MRC question",
+        //   date: "19/1/10",
+        //   desc:
+        //     'try{(function(oa){function wc(a,b){if(null===this||void 0===this)throw new TypeError("Array.prototype.forEach called on null or undefined");if("function"!==typeof a)throw new TypeError(a+" is not a fu...'
+        // }
+      ],
+      value: '',
+      extensionInstalled: false,
+      checkCount: 0,
+      allAccounts: [],
+      currentArtitle: {
+        content: '',
+      },
+      currentHtml: '',
+      taskStatus: {},
+      markdownOption: {
+        // boxShadow: false
+      },
+    }
+  },
+
+  watch: {
+    currentArtitle: {
+      handler: function (newValue) {
+        console.log('change', this.currentArtitle, newValue)
+        this.saveDoc(newValue)
+      },
+      deep: true,
+    },
+  },
+  mounted() {
+    // if(this.list.length) this.currentArtitle = this.list[0];
+    this.loadDoc()
+    var self = this
+    ;(function check() {
+      self.extensionInstalled = typeof window.$syncer != 'undefined'
+      //   self.extensionInstalled = false
+      self.checkCount++
+      if (self.extensionInstalled) {
+        // self.recom();
+        self.loadAccounts()
+        return
+      }
+      setTimeout(check, 800)
+    })()
+
+    config({
+      markdownItConfig(md) {
+        const defaultRender =
+          md.renderer.rules.image ||
+          function (tokens, idx, options, _, self) {
+            return self.renderToken(tokens, idx, options)
+          }
+        md.renderer.rules.image = (...[tokens, idx, options, env, self]) => {
+          tokens[idx].attrPush(['referrerpolicy', 'no-referrer'])
+          return defaultRender(tokens, idx, options, env, self)
+        }
+      },
+    })
+  },
+  methods: {
+    formatDate(time) {
       let oldDate = new Date(time)
       let newDate = new Date()
       var dayNum = ''
@@ -317,67 +404,9 @@ export default {
         second
       )
     },
-  },
-  data() {
-    return {
-      visible: false,
-      submitting: false,
-      list: [
-        // {
-        //   id: 0,
-        //   title: "MRC question1",
-        //   date: "19/1/10",
-        //   desc: "navigator.battery navigator.getBattery()"
-        // },
-        // {
-        //   id:  1,
-        //   title: "MRC question",
-        //   date: "19/1/10",
-        //   desc:
-        //     'try{(function(oa){function wc(a,b){if(null===this||void 0===this)throw new TypeError("Array.prototype.forEach called on null or undefined");if("function"!==typeof a)throw new TypeError(a+" is not a fu...'
-        // }
-      ],
-      value: '',
-      extensionInstalled: false,
-      checkCount: 0,
-      allAccounts: [],
-      currentArtitle: {
-        content: ''
-      },
-      taskStatus: {},
-      markdownOption: {
-        // boxShadow: false
-      },
-    }
-  },
-
-  watch: {
-    currentArtitle: {
-      handler: function (newValue) {
-        console.log('change', this.currentArtitle, newValue)
-        this.saveDoc(newValue)
-      },
-      deep: true,
+    onHtmlChanged(html) {
+      this.currentHtml = html
     },
-  },
-  mounted() {
-    // if(this.list.length) this.currentArtitle = this.list[0];
-    this.loadDoc()
-    var self = this
-    ;(function check() {
-      self.extensionInstalled = typeof window.$syncer != 'undefined'
-      //   self.extensionInstalled = false
-      self.checkCount++
-      if (self.extensionInstalled) {
-        // self.recom();
-        self.loadAccounts()
-        return
-      }
-      setTimeout(check, 800)
-    })()
-    
-  },
-  methods: {
     loadAccounts() {
       var allAccounts = []
       var accounts = []
@@ -388,31 +417,8 @@ export default {
           console.log('allAccounts', resp)
           self.allAccounts = resp
         })
-        // chrome.extension.sendMessage(
-        //   {
-        //     action: 'getAccount',
-        //   },
-        //   function (resp) {
-        //     console.log('allAccounts', resp)
-        //     self.allAccounts = resp
-        //   }
-        // )
       }
       getAccounts()
-
-      this.$nextTick(() => {
-        console.log('this.$refs.editor.markdownIt', this.$refs.editor.markdownIt)
-        const md = this.$refs.editor.markdownIt
-        const defaultRender =
-          md.renderer.rules.image ||
-          function (tokens, idx, options, _, self) {
-            return self.renderToken(tokens, idx, options);
-          };
-        md.renderer.rules.image = (...[tokens, idx, options, env, self]) => {
-          tokens[idx].attrPush(['referrerpolicy','no-referrer']);
-          return defaultRender(tokens, idx, options, env, self);
-        };
-      })
     },
 
     async doSubmit() {
@@ -421,10 +427,8 @@ export default {
       function getPost() {
         var post = {}
         post.title = self.currentArtitle.title
-        post.content = self.$refs.editor.d_render
+        post.content = self.currentHtml
         post.markdown = self.currentArtitle.content
-        // post.thumb = document.body.getAttribute('data-msg_cdn_url');
-        // post.desc = document.body.getAttribute('data-msg_desc');
         console.log(post)
         return post
       }
@@ -433,8 +437,6 @@ export default {
         return a.checked
       })
 
-      // console.log(selectedAc, this.$refs.editor.d_render);
-      // return;
       this.$message('准备同步')
       window.$syncer.addTask(
         {
@@ -449,17 +451,6 @@ export default {
           console.log('send')
         }
       )
-
-      //   chrome.extension.sendMessage(
-      //     {
-      //       action: 'addTask',
-      //       task: {
-      //         post: getPost(),
-      //         accounts: selectedAc,
-      //       },
-      //     },
-      //     function (resp) {}
-      //   )
 
       this.submitting = true
       this.taskStatus = {}
@@ -530,7 +521,6 @@ export default {
         this.createExampleDoc()
       }
 
-      
       console.log(this.list)
     },
 
@@ -569,15 +559,7 @@ export default {
       this.loadDoc()
       console.log('create', res, doc)
     },
-    open(item) {
-      this.currentArtitle = item
-    },
-    async imgAdd(pos, $file) {
-
-      // console.log('this.$refs.editor.markdownIt.renderer', this.$refs.editor.markdownIt)
-      // var dri = new Segmentfault();
-      //   var dri = new Juejin()
-      //   var finalUrl = await dri.uploadFileByForm($file)
+    async onUploadImg(files, callback) {
       var sortOrderTypes = [
         'toutiao',
         'jianshu',
@@ -595,22 +577,29 @@ export default {
         return
       }
 
-      var base64Url = await toBase64($file)
       var accountCurrent = sortOrderTypes[0]
-      var actionData = {
-        src: base64Url,
-        account: accountCurrent,
-      }
-      console.log('actionData', actionData)
-      window.$syncer.uploadImage(actionData, (res) => {
-        console.log('res', res)
-        if (accountCurrent.type === 'zhihu') {
-          res.result.url = [res.result.url, '_r.jpg'].join('')
-        }
-        this.$refs.editor.$img2Url(pos, res.result.url)
-      })
-      console.log('imgAdd', pos, $file, sortOrderTypes, this.allAccounts)
-      //   this.$refs.editor.$img2Url(pos, finalUrl)
+
+      const res = await Promise.all(
+        files.map((file) => {
+          return new Promise(async (rev, rej) => {
+            var base64Url = await toBase64(file)
+            var actionData = {
+              src: base64Url,
+              account: accountCurrent,
+            }
+            console.log('actionData', actionData)
+            window.$syncer.uploadImage(actionData, (res) => {
+              console.log('res', res)
+              if (accountCurrent.type === 'zhihu') {
+                res.result.url = [res.result.url, '_r.jpg'].join('')
+              }
+              rev(res.result.url)
+            })
+          })
+        })
+      )
+
+      callback(res)
     },
   },
 }

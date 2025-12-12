@@ -12,3 +12,8 @@ zip
 package-json.lock
 package-lock.json
 
+# pnpm
+# Note: pnpm-lock.yaml should be committed (similar to yarn.lock)
+.pnpm-store
+.pnpm-debug.log
+

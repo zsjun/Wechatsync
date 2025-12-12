@@ -1,4 +1,4 @@
-const callbacks = []
+let callbacks = []
 window.__onThemeChange = function(theme) {
   callbacks.forEach(cb => cb(theme))
 }

@@ -1,44 +1,36 @@
-/**
- * We register all the components so future cli-ui plugins
- * could use them directly
- */
-
-import Vue from 'vue'
-
-// vue-codemirror
-import VueCodemirror from 'vue-codemirror'
 import 'codemirror/lib/codemirror.css'
-Vue.use(VueCodemirror)
 
 // splitPane
-import splitPane from 'vue-splitpane'
-Vue.component('split-pane', splitPane)
+import { Splitpanes, Pane } from 'splitpanes'
+import 'splitpanes/dist/splitpanes.css'
 
 // contextmenu
-import contextmenu from 'v-contextmenu'
-import 'v-contextmenu/dist/index.css'
-Vue.use(contextmenu)
+import ContextMenu from '@imengyu/vue3-context-menu'
+import '@imengyu/vue3-context-menu/lib/vue3-context-menu.css'
 
 // prefect-scrollbar
-import PerfectScrollbar from 'vue2-perfect-scrollbar'
-import 'vue2-perfect-scrollbar/dist/vue2-perfect-scrollbar.css'
-Vue.use(PerfectScrollbar)
+import { PerfectScrollbar } from 'vue3-perfect-scrollbar'
+import 'vue3-perfect-scrollbar/style.css'
 
-// https://webpack.js.org/guides/dependency-management/#require-context
-// https://cn.vuejs.org/v2/guide/components-registration.html#基础组件的自动化全局注册
-const requireComponent = require.context(
-  './ui',
-  true,
-  /[a-z0-9]+\.(jsx?|vue)$/i
-)
+const modules = import.meta.glob('./ui/*.vue', { eager: true })
 
-// For each matching file name...
-requireComponent.keys().forEach(fileName => {
-  const componentConfig = requireComponent(fileName)
-  const componentName = fileName
-    .substr(fileName.lastIndexOf('/') + 1)
-    // Remove the file extension from the end
-    .replace(/\.\w+$/, '')
-  // Globally register the component
-  Vue.component(componentName, componentConfig.default || componentConfig)
-})
+export default (app) => {
+  // vue-codemirror replacement - we will use a custom component or manual integration
+  // For now, we assume CodeEditor.vue is handling it directly with codemirror package
+
+  app.component('split-pane', Splitpanes)
+  app.component('pane', Pane)
+
+  app.use(ContextMenu)
+  app.component('PerfectScrollbar', PerfectScrollbar)
+
+  for (const path in modules) {
+    const componentConfig = modules[path]
+    const componentName = path
+      .split('/')
+      .pop()
+      .replace(/\.\w+$/, '')
+
+    app.component(componentName, componentConfig.default || componentConfig)
+  }
+}

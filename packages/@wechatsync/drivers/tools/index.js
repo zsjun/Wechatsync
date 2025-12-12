@@ -1,4 +1,4 @@
-const { processDocCode, makeImgVisible } = require('./code')
+import { processDocCode, makeImgVisible } from './code'
 import markdownToDraft from './mtd'
 import turndownExt from './turnDownExtend'
 import doPreFilter from './preFilter'

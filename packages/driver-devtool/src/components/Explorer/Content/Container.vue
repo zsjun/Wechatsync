@@ -3,22 +3,21 @@
     <tab-bar :active="activeItem"></tab-bar>
     <div class="main" v-if="!!this.activeId">
       <split-pane
-        split="horizontal"
-        :default-percent="panelPercent"
-        :min-percent="10"
-        className="split-pane-resizer-content"
+        class="default-theme split-pane-resizer-content"
+        horizontal="true"
+        style="height: 100%"
         @resize="recordPanelPercent"
       >
-        <template slot="paneL">
+        <pane :size="panelPercent" :min-size="10">
           <code-editor
             :active="activeItem"
             :theme="theme"
             @toggle-terminal="toggleTerminal"
           ></code-editor>
-        </template>
-        <template slot="paneR">
+        </pane>
+        <pane :size="100 - panelPercent">
           <terminal :theme="theme" @toggle-terminal="toggleTerminal"></terminal>
-        </template>
+        </pane>
       </split-pane>
     </div>
   </div>
@@ -54,13 +53,17 @@ export default {
   },
   methods: {
     recordPanelPercent(value) {
-      this.$preferPanelPercent = value
-      set('preference_terminal_panel_percent', this.$preferPanelPercent)
+      if (Array.isArray(value) && value.length > 0) {
+        // splitpanes emits an array of pane sizes
+        this.panelPercent = value[0].size
+        this.$preferPanelPercent = this.panelPercent
+        set('preference_terminal_panel_percent', this.$preferPanelPercent)
+      }
     },
     toggleTerminal() {
-      if (this.panelPercent === 100) {
+      if (this.panelPercent >= 99) {
         this.panelPercent =
-          this.$preferPanelPercent === 100 ? 70 : this.$preferPanelPercent
+          this.$preferPanelPercent >= 99 ? 70 : this.$preferPanelPercent
       } else {
         this.panelPercent = 100
       }
@@ -72,7 +75,7 @@ export default {
   mounted() {
     addThemeChangeListener(this.onThemeChange)
   },
-  beforeDestroy() {
+  beforeUnmount() {
     removeThemeChangeListener(this.onThemeChange)
   },
 }
