@@ -15,7 +15,7 @@
               <div class="account-item" v-for="account in allAccounts">
                 <el-checkbox v-model="account.checked">
                   <img
-                    :src="account.icon ? account.icon : ''"
+                    :src="account.avatar || account.icon || ''"
                     class="icon"
                     height="20"
                     style="vertical-align: -6px; height: 20px !important"
@@ -31,7 +31,7 @@
                 v-for="account in taskStatus.accounts"
               >
                 <img
-                  :src="account.icon ? account.icon : ''"
+                  :src="account.avatar || account.icon || ''"
                   class="icon"
                   height="20"
                   style="vertical-align: -6px; height: 20px !important"

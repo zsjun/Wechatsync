@@ -149,7 +149,7 @@
               <li v-for="account in accounts">
                 <a :href="account.home" target="_blank">
                   <img
-                    :src="account.icon ? account.icon : '/images/wordpress.ico'"
+                    :src="account.avatar || account.icon || '/images/wordpress.ico'"
                     class="icon"
                     height="20"
                   />

@@ -29,11 +29,36 @@ export default class JuejinAdapter {
 
   async getMetaData() {
     var data = await $.get('https://api.juejin.cn/user_api/v1/user/get')
-    console.log(data)
+    console.log('Juejin getMetaData response:', data)
+    
+    if (!data || !data.data) {
+      throw new Error('获取用户信息失败')
+    }
+    
+    // 尝试多种可能的头像字段名
+    var avatar = data.data.avatar_large || 
+                 data.data.avatar_url || 
+                 data.data.avatar || 
+                 data.data.avatar_medium ||
+                 data.data.avatar_small
+    
+    console.log('Juejin avatar raw:', avatar)
+    
+    // 如果头像URL存在但没有协议，添加https://
+    if (avatar) {
+      if (avatar.startsWith('//')) {
+        avatar = 'https:' + avatar
+      } else if (!avatar.startsWith('http://') && !avatar.startsWith('https://')) {
+        avatar = 'https://' + avatar.replace(/^\/+/, '')
+      }
+    }
+    
+    console.log('Juejin avatar processed:', avatar)
+    
     return {
       uid: data.data.user_id,
       title: data.data.user_name,
-      avatar: data.data.avatar_large,
+      avatar: avatar,
       type: 'juejin',
       displayName: '掘金',
       raw: data.data,

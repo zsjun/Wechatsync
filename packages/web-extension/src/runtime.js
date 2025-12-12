@@ -9,23 +9,57 @@ const $ = function(selector) {
   // console.warn('jQuery($) called with', selector)
   return []
 }
+// 使用原生 fetch 替代 axios，确保在 Service Worker 里能正确带上 Cookie
 $.get = async function(url) {
-  const res = await axios.get(url)
-  return res.data
+  const res = await fetch(url, { credentials: 'include' })
+  const text = await res.text()
+  try {
+    return JSON.parse(text)
+  } catch {
+    return text
+  }
 }
 $.post = async function(url, data) {
-  const res = await axios.post(url, data)
-  return res.data
+  const res = await fetch(url, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: typeof data === 'string' ? data : new URLSearchParams(data).toString()
+  })
+  const text = await res.text()
+  try {
+    return JSON.parse(text)
+  } catch {
+    return text
+  }
 }
 $.ajax = async function(settings) {
-  const config = {
-    url: settings.url,
-    method: settings.type || settings.method || 'GET',
-    data: settings.data,
-    headers: settings.headers
+  const method = (settings.type || settings.method || 'GET').toUpperCase()
+  const fetchOptions = {
+    method,
+    credentials: 'include',  // 带上 Cookie
+    headers: settings.headers || {}
   }
-  const res = await axios(config)
-  return res.data
+  
+  if (method !== 'GET' && settings.data) {
+    if (settings.dataType === 'JSON' || settings.contentType === 'application/json') {
+      fetchOptions.headers['Content-Type'] = 'application/json'
+      fetchOptions.body = JSON.stringify(settings.data)
+    } else {
+      fetchOptions.headers['Content-Type'] = 'application/x-www-form-urlencoded'
+      fetchOptions.body = typeof settings.data === 'string' 
+        ? settings.data 
+        : new URLSearchParams(settings.data).toString()
+    }
+  }
+  
+  const res = await fetch(settings.url, fetchOptions)
+  const text = await res.text()
+  try {
+    return JSON.parse(text)
+  } catch {
+    return text
+  }
 }
 
 export function getSettings() {

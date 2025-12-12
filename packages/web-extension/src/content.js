@@ -54,27 +54,96 @@ function sendEvent(category, action, label) {
 var unsafeWindow
 var sharedTaskStatus = null
 
+// MV3: 存储从 background 通过 chrome.scripting.executeScript 获取的页面全局变量
+var pageGlobals = null
+
+// MV3: 异步获取页面全局变量（替代原来的内联脚本注入）
+function fetchPageGlobals() {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ action: 'getPageGlobals' }, function (data) {
+      if (chrome.runtime.lastError) {
+        console.error('fetchPageGlobals error:', chrome.runtime.lastError)
+      }
+      if (data && (data.title || data.desc || data.thumb)) {
+        pageGlobals = data
+        console.log('[WCS] pageGlobals fetched via scripting API:', pageGlobals)
+      } else {
+        console.warn('[WCS] scripting API returned empty, will use DOM fallback. data:', data)
+      }
+      resolve(pageGlobals)
+    })
+  })
+}
+
+// 页面加载后获取全局变量
 setTimeout(function () {
-  var script = document.createElement('script')
-  script.type = 'text/javascript'
-  script.innerHTML =
-    "if(typeof msg_desc != 'undefined') { document.body.setAttribute('data-ct', ct); document.body.setAttribute('data-nickname', nickname); document.body.setAttribute('data-msg_desc', msg_desc );document.body.setAttribute('data-msg_title', msg_title);document.body.setAttribute('data-msg_cdn_url', msg_cdn_url); }"
-  document.head.appendChild(script)
-  document.head.removeChild(script)
-}, 50)
+  console.log('[WCS] Starting fetchPageGlobals...')
+  fetchPageGlobals().then(result => {
+    console.log('[WCS] fetchPageGlobals completed, result:', result)
+  })
+}, 100)
 
 console.log('accounts', accounts)
+
+// 获取文章数据（同步版本，依赖 pageGlobals 或 DOM fallback）
 function getPost() {
   var post = {}
-  post.title = document.body.getAttribute('data-msg_title')
+  
+  // 优先使用 pageGlobals（通过 scripting API 获取）
+  if (pageGlobals && pageGlobals.title) {
+    post.title = pageGlobals.title
+    post.thumb = pageGlobals.thumb
+    post.desc = pageGlobals.desc
+    post.nickname = pageGlobals.nickname
+    post.publish_time = pageGlobals.publish_time
+    console.log('[WCS] Using pageGlobals data')
+  } else {
+    // DOM fallback（以防 scripting API 失败）
+    // 微信公众号文章标题有多种可能的选择器
+    post.title = document.querySelector('#activity-name')?.textContent?.trim()
+              || document.querySelector('.rich_media_title')?.textContent?.trim()
+              || document.querySelector('h1.rich_media_title')?.textContent?.trim()
+              || document.querySelector('meta[property="og:title"]')?.content
+              || document.title?.replace(/ - 微信公众平台$/, '')?.trim()
+    
+    // 封面图
+    post.thumb = document.querySelector('meta[property="og:image"]')?.content
+              || document.querySelector('meta[name="twitter:image"]')?.content
+              || document.querySelector('#js_content img')?.src
+    
+    // 摘要
+    post.desc = document.querySelector('meta[property="og:description"]')?.content
+             || document.querySelector('meta[name="description"]')?.content
+    
+    // 作者/公众号名称
+    post.nickname = document.querySelector('#js_name')?.textContent?.trim()
+                 || document.querySelector('.profile_nickname')?.textContent?.trim()
+                 || document.querySelector('a#js_name')?.textContent?.trim()
+    
+    // 发布时间
+    post.publish_time = document.querySelector('#publish_time')?.textContent?.trim()
+                     || document.querySelector('.rich_media_meta_text')?.textContent?.trim()
+    
+    console.log('[WCS] Using DOM fallback data')
+  }
+  
+  // 正文始终从 DOM 获取
   post.content = $('#js_content').html()
-  post.thumb = document.body.getAttribute('data-msg_cdn_url')
-  post.desc = document.body.getAttribute('data-msg_desc')
-  post.nickname = document.body.getAttribute('data-nickname')
-  post.publish_time = document.body.getAttribute('data-ct')
   post.link = window.location.href
-  console.log(post)
+  
+  console.log('[WCS] getPost result:', post)
   return post
+}
+
+// 异步版本的 getPost，确保 pageGlobals 已加载
+async function getPostAsync() {
+  console.log('[WCS] getPostAsync called, current pageGlobals:', pageGlobals)
+  if (!pageGlobals) {
+    console.log('[WCS] pageGlobals is null, fetching...')
+    await fetchPageGlobals()
+    console.log('[WCS] After fetch, pageGlobals:', pageGlobals)
+  }
+  return getPost()
 }
 
 function extractUrlValue(key, url) {
@@ -95,8 +164,8 @@ if (isSinglePage) {
     '<div data-toggle="modal" data-target="#exampleModalCenter" style=\'    font-size: 14px;border: 1px solid #eee;width: 105px; text-align: center; box-shadow: 0px 0px 1px rgba(0,0,0, 0.1);border-radius: 5px;padding: 5px; cursor: pointer;    background: rgb(0, 123, 255);color: white;\'>同步该文章</div>'
   )
 
-  function afterGet() {
-    var post = getPost()
+  async function afterGet() {
+    var post = await getPostAsync()
     var html = ''
     accounts = allAccounts
     var supportAccounts = allAccounts.filter((item) => {
@@ -117,8 +186,8 @@ if (isSinglePage) {
         index +
         `">
   <img src="` +
-        (account.icon
-          ? account.icon
+        (account.avatar || account.icon
+          ? account.avatar || account.icon
           : chrome.extension.getURL('images/wordpress.ico')) +
         `" class="icon" height="20" style="vertical-align: -3px;height: 20px !important">
   ` +
@@ -444,9 +513,9 @@ function buildStatusHtml(taskStatus) {
     return (
       `<div class="account-item taskStatus">
                  ` +
-      (account.icon
+      (account.avatar || account.icon
         ? ` <img src="` +
-          account.icon +
+          (account.avatar || account.icon) +
           `" class="icon"
       width="20"
       height="20"
@@ -497,7 +566,7 @@ function buildStatusHtml(taskStatus) {
   }
 }
 
-$('#exampleModalCenter .btn-primary').click(function (e) {
+$('#exampleModalCenter .btn-primary').click(async function (e) {
   // var listAccount = $('input[name="submit_check"]')
   // var saccounts = []
   // for (let index = 0; index < listAccount.length; index++) {
@@ -517,11 +586,14 @@ $('#exampleModalCenter .btn-primary').click(function (e) {
     return e.stopPropagation()
   }
 
+  // MV3: 异步获取文章数据
+  const post = await getPostAsync()
+
   chrome.runtime.sendMessage(
     {
       action: 'addTask',
       task: {
-        post: getPost(),
+        post: post,
         accounts: saccounts,
       },
     },
@@ -702,8 +774,8 @@ if (isEditorPage) {
           index +
           `">
   <img src="` +
-          (account.icon
-            ? account.icon
+          (account.avatar || account.icon
+            ? account.avatar || account.icon
             : chrome.runtime.getURL('images/wordpress.ico')) +
           `" class="icon" height="18" style="height: 20px !important">
   ` +

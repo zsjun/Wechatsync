@@ -9,7 +9,10 @@ export default class ToutiaoAdapter {
     var res = await $.ajax({
       url: 'https://mp.toutiao.com/mp/agw/media/get_media_info',
     })
-    res = JSON.parse(res)
+    // 兼容处理：如果返回的是字符串则解析，如果已经是对象则直接使用
+    if (typeof res === 'string') {
+      res = JSON.parse(res)
+    }
     return {
       uid: res.data.user.id,
       title: res.data.user.screen_name,

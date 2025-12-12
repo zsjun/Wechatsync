@@ -14,6 +14,7 @@ import {
 } from '@/runtime'
 
 import * as localDriver from './drivers/driver'
+import axiosLib from 'axios'
 
 // Drivers (from @wechatsync/drivers) call `modifyRequestHeaders(...)` as a free identifier.
 // Define it in *module scope* (so bundling keeps it and the identifier resolves),
@@ -35,12 +36,84 @@ if (typeof window === 'undefined') {
   self.window = self
 }
 
-window.currentDriver = localDriver
+// ========== 全局变量注入（driver 代码需要） ==========
 
-// Mock jQuery for simple usages if needed, or rely on cheerio
-const $ = (content) => {
-  return load(content, { decodeEntities: false }, false)
+// axios 全局变量
+globalThis.axios = axiosLib
+
+// jQuery shim - 使用原生 fetch 带上 Cookie
+const $ = function(selector) {
+  // 如果是 HTML 字符串，用 cheerio 解析
+  if (typeof selector === 'string' && (selector.startsWith('<') || selector.includes('<'))) {
+    return load(selector, { decodeEntities: false }, false)
+  }
+  // 否则返回 cheerio 的 root
+  return load(selector || '', { decodeEntities: false }, false)
 }
+
+// $.get - GET 请求（自动解析 JSON）
+$.get = async function(url) {
+  const res = await fetch(url, { credentials: 'include' })
+  const text = await res.text()
+  try {
+    return JSON.parse(text)
+  } catch {
+    return text
+  }
+}
+
+// $.post - POST 请求（自动解析 JSON）
+$.post = async function(url, data) {
+  const res = await fetch(url, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: typeof data === 'string' ? data : new URLSearchParams(data).toString()
+  })
+  const text = await res.text()
+  try {
+    return JSON.parse(text)
+  } catch {
+    return text
+  }
+}
+
+// $.ajax - 通用 AJAX 请求（自动解析 JSON）
+$.ajax = async function(settings) {
+  const method = (settings.type || settings.method || 'GET').toUpperCase()
+  const fetchOptions = {
+    method,
+    credentials: 'include',
+    headers: { ...(settings.headers || {}) }
+  }
+  
+  if (method !== 'GET' && settings.data) {
+    if (settings.dataType === 'JSON' || settings.contentType === 'application/json') {
+      fetchOptions.headers['Content-Type'] = 'application/json'
+      fetchOptions.body = typeof settings.data === 'string' ? settings.data : JSON.stringify(settings.data)
+    } else {
+      fetchOptions.headers['Content-Type'] = 'application/x-www-form-urlencoded'
+      fetchOptions.body = typeof settings.data === 'string' 
+        ? settings.data 
+        : new URLSearchParams(settings.data).toString()
+    }
+  }
+  
+  const res = await fetch(settings.url, fetchOptions)
+  const text = await res.text()
+  try {
+    return JSON.parse(text)
+  } catch {
+    return text
+  }
+}
+
+// 注入到全局作用域，driver 代码可以直接使用
+globalThis.$ = $
+
+// ========== 全局变量注入结束 ==========
+
+window.currentDriver = localDriver
 
 // index by tabId
 var logWatchers = {}
@@ -328,6 +401,37 @@ class Syner {
         })()
         return true
       }
+
+      // MV3: 使用 chrome.scripting.executeScript 在页面主世界获取全局变量
+      if (request.action && request.action == 'getPageGlobals') {
+        chrome.scripting.executeScript({
+          target: { tabId: sender.tab.id },
+          world: 'MAIN',
+          func: () => {
+            // 在页面主世界执行，可以访问页面的全局变量
+            // 使用 try-catch 避免影响页面
+            try {
+              return {
+                title: typeof msg_title !== 'undefined' ? msg_title : null,
+                desc: typeof msg_desc !== 'undefined' ? msg_desc : null,
+                thumb: typeof msg_cdn_url !== 'undefined' ? msg_cdn_url : null,
+                nickname: typeof nickname !== 'undefined' ? nickname : null,
+                publish_time: typeof ct !== 'undefined' ? ct : null,
+              }
+            } catch (e) {
+              return null
+            }
+          }
+        }).then(results => {
+          console.log('[WCS] getPageGlobals result:', results)
+          sendResponseA(results[0]?.result || null)
+        }).catch(err => {
+          console.error('[WCS] getPageGlobals error:', err)
+          sendResponseA(null)
+        })
+        return true
+      }
+
       if (request.action && request.action == 'addTask') {
         console.log(request)
         ;(async () => {

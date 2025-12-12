@@ -44,7 +44,7 @@
     <ul class="account-types" v-for="account in taskDetail.accounts">
       <li @click="addWordpress = true" class="media">
         <img
-          :src="account.icon ? account.icon : '/images/wordpress.ico'"
+          :src="account.avatar || account.icon || '/images/wordpress.ico'"
           class="align-self-center mr-3 icon"
           height="35"
         />

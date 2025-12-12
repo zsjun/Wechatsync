@@ -236,9 +236,17 @@ export async function getPublicAccounts() {
       const results = await Promise.all(
         stepItem.map((driver) => {
           return new Promise((resolve, reject) => {
-            driver.getMetaData().then(resolve, function() {
-              resolve(null)
-            })
+            const driverName = driver.name || driver.constructor?.name || 'unknown'
+            driver.getMetaData().then(
+              (result) => {
+                console.log(`[WCS] ${driverName} getMetaData success:`, result?.title || result)
+                resolve(result)
+              },
+              (error) => {
+                console.warn(`[WCS] ${driverName} getMetaData failed:`, error?.message || error)
+                resolve(null)
+              }
+            )
           })
         })
       );
