@@ -122,11 +122,10 @@
 </template>
 <script>
 import PouchDB from 'pouchdb'
-import PouchDBFind from 'pouchdb-find'
+import 'pouchdb-find'
 import ClickOutside from 'vue-click-outside'
 import axios from 'axios'
 
-PouchDB.plugin(PouchDBFind)
 var db = new PouchDB('articles')
 var trash = new PouchDB('trash-articles')
 
@@ -380,7 +379,8 @@ export default {
         post.title = self.$refs.title.innerText
         post.content = originalHtml
         post.inline_content = self.$refs.viewport.innerHTML
-        // post.markdown = self.currentArtitle.content;
+        // If source provides markdown (e.g. mdnice), carry it through for per-platform publishing decisions.
+        post.markdown = self.pageData && self.pageData.markdown ? self.pageData.markdown : ''
         post.thumb = self.pageData.mainImage
         if (!post.thumb) {
           post.thumb = self.pageData.leadingImage

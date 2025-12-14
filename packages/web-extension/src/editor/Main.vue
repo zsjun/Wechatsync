@@ -134,11 +134,10 @@
 </template>
 <script>
 import PouchDB from 'pouchdb'
-import PouchDBFind from 'pouchdb-find'
+import 'pouchdb-find'
 import axios from 'axios'
 import drivers from '@wechatsync/drivers'
 
-PouchDB.plugin(PouchDBFind)
 console.log(PouchDB)
 var db = new PouchDB('articles')
 var trash = new PouchDB('trash-articles')

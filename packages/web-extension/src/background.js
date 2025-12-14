@@ -810,6 +810,24 @@ class Syner {
 
     var postContent = JSON.parse(JSON.stringify(currentTask.post))
 
+    // If the source provides markdown (e.g. mdnice) and this target supports markdown,
+    // prefer markdown for this platform by setting `content_<type>` automatically.
+    // Note: image URL rewriting currently happens based on HTML; markdown image URLs may not be rewritten.
+    try {
+      if (
+        postContent &&
+        postContent.markdown &&
+        (!postContent[`content_${account.type}`] || postContent[`content_${account.type}`].trim() === '') &&
+        account &&
+        account.supportTypes &&
+        account.supportTypes.indexOf('markdown') > -1
+      ) {
+        postContent[`content_${account.type}`] = postContent.markdown
+      }
+    } catch (e) {
+      // ignore
+    }
+
     try {
       if (driver.preEditPost) {
         console.log('driver.preEditPost')
@@ -1035,11 +1053,61 @@ function onContextMenuClicked(info, tab) {
     if (!tab || typeof tab.id !== 'number') return
 
     var link = info.linkUrl || info.frameUrl || info.pageUrl
-    chrome.tabs.sendMessage(tab.id, {
+    const msg = {
       method: 'fetchArticle',
       text: tab.title,
       link: link,
       info: info,
+    }
+
+    function notifyFetchArticleFailed(detail) {
+      try {
+        chrome.notifications.create(
+          'fetch_article_failed_' + tab.id + '_' + Date.now(),
+          {
+            type: 'basic',
+            title: '提取失败',
+            message:
+              (detail ? detail + '\n' : '') +
+              '请检查扩展对当前站点的访问权限（Site access），然后刷新页面重试。',
+            iconUrl: 'images/logo.png',
+          },
+          function () {}
+        )
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    // Some sites require explicit "site access" permission, and in MV3 the content script
+    // might not be present yet (or the tab is not ready). Add a best-effort retry by
+    // injecting `page.js` and resending.
+    chrome.tabs.sendMessage(tab.id, msg, async () => {
+      if (!chrome.runtime.lastError) return
+      console.warn(
+        '[WCS] sendMessage(fetchArticle) failed:',
+        chrome.runtime.lastError?.message,
+        'tab.url=',
+        tab.url
+      )
+      try {
+        // Best-effort: inject page.js (no-op if already present), then retry once.
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          // page.js depends on jquery/Readability/reader helpers when running as a content script.
+          // Inject them together to avoid runtime errors when site access was previously disabled.
+          files: ['libs/juqery.js', 'libs/Readability.js', 'libs/reader.js', 'page.js'],
+        })
+        chrome.tabs.sendMessage(tab.id, msg, () => {
+          if (chrome.runtime.lastError) {
+            console.warn('[WCS] retry sendMessage(fetchArticle) failed:', chrome.runtime.lastError?.message)
+            notifyFetchArticleFailed(chrome.runtime.lastError?.message || '无法发送消息到页面')
+          }
+        })
+      } catch (e) {
+        console.warn('[WCS] executeScript(page.js) failed:', e)
+        notifyFetchArticleFailed((e && e.message) || String(e))
+      }
     })
   } catch (e) {
     console.log('contextMenus.onClicked error', e)
@@ -1047,19 +1115,19 @@ function onContextMenuClicked(info, tab) {
 }
 
 function createSharedContextmenu() {
-  if (!sharedContextmenuId) {
+  chrome.contextMenus.removeAll(function() {
     sharedContextmenuId = chrome.contextMenus.create({
       id: 'getAttrile',
       title: '提取文章并同步',
       contexts: ['all'],
     })
-
+    
     // MV3: cannot pass `onclick` to create(); must use onClicked event.
     if (!_contextMenuListenerBound) {
       chrome.contextMenus.onClicked.addListener(onContextMenuClicked)
       _contextMenuListenerBound = true
     }
-  }
+  });
 }
 
 function removeSharedContextmenu() {

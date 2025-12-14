@@ -33,6 +33,12 @@ export default defineConfig({
       '@': path.resolve(__dirname, 'src'),
       vue: 'vue/dist/vue.esm-bundler.js',
       '@wechatsync/drivers': path.resolve(__dirname, '../@wechatsync/drivers'),
+      // Fix for PouchDB in Vite (ESM build issues)
+      pouchdb: path.resolve(__dirname, 'src/pouchdb-shim.js'),
+      'pouchdb-find': path.resolve(
+        __dirname,
+        'node_modules/pouchdb/dist/pouchdb.find.js'
+      ),
       // Fix for entities deep import issues in juice/cheerio
       'entities/escape': path.resolve(
         __dirname,

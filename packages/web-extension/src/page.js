@@ -97,13 +97,78 @@ display: none;">
     var $widgetPage = $('.wechatsync-viewer iframe')
   }
 
+  // The viewer is an extension-origin iframe. If we postMessage before its JS mounts,
+  // the initial payload can be lost. Queue messages until the iframe fires `load`.
+  var _viewerReady = false
+  var _viewerQueue = []
+
+  function _flushViewerQueue() {
+    try {
+      if (!_viewerReady) return
+      if (!$widgetPage || !$widgetPage[0] || !$widgetPage[0].contentWindow)
+        return
+      while (_viewerQueue.length) {
+        var msg = _viewerQueue.shift()
+        $widgetPage[0].contentWindow.postMessage(msg, '*')
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  function _markViewerReady() {
+    _viewerReady = true
+    try {
+      if ($widgetPage && $widgetPage[0] && $widgetPage[0].dataset) {
+        $widgetPage[0].dataset.wcsReady = '1'
+      }
+    } catch (e) {}
+    _flushViewerQueue()
+  }
+
+  function postToViewer(data) {
+    try {
+      if (!$widgetPage || !$widgetPage[0] || !$widgetPage[0].contentWindow)
+        return
+      var payload = typeof data === 'string' ? data : JSON.stringify(data)
+      // If we already marked ready in a previous init, don't re-queue.
+      try {
+        if ($widgetPage[0].dataset && $widgetPage[0].dataset.wcsReady === '1') {
+          _viewerReady = true
+        }
+      } catch (e) {}
+
+      if (_viewerReady) {
+        $widgetPage[0].contentWindow.postMessage(payload, '*')
+      } else {
+        _viewerQueue.push(payload)
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  // Bind iframe load handler once.
+  try {
+    if ($widgetPage && $widgetPage[0]) {
+      var iframeEl = $widgetPage[0]
+      if (iframeEl.dataset && iframeEl.dataset.wcsOnloadBound !== '1') {
+        iframeEl.addEventListener('load', function () {
+          _markViewerReady()
+        })
+        iframeEl.dataset.wcsOnloadBound = '1'
+      }
+      // Fallback: mark ready after a short delay (better than dropping all messages).
+      setTimeout(function () {
+        if (!_viewerReady) _markViewerReady()
+      }, 1500)
+    }
+  } catch (e) {}
+
   function showArticle() {
     adoptableArticle()
     widgetDomMain.css('display', 'block')
-    $widgetPage[0].contentWindow.postMessage(
-      JSON.stringify({ method: 'openPannel' }),
-      '*'
-    )
+    postToViewer({ method: 'openPannel' })
   }
 
   $('#syncd-title').click(function () {
@@ -178,7 +243,7 @@ display: none;">
       ReaderArticleFinderJS.adoptableArticle(),
       pageData
     )
-    $widgetPage[0].contentWindow.postMessage(JSON.stringify(pageData), '*')
+    postToViewer(pageData)
   }
 
   function findAndShow(timeout, found) {
@@ -214,6 +279,58 @@ display: none;">
   }
 
   if (isForceShow) {
+    if (window.location.hostname.includes('mdnice.com')) {
+      // Mdnice Special Logic
+      fetchMdniceArticle()
+        .then(function (data) {
+          var title = 'Mdnice 文章'
+          try {
+            if (data.markdown) {
+              var titleMatch = data.markdown.match(/^#+\s+(.*)/m)
+              if (titleMatch) title = titleMatch[1].trim()
+            }
+          } catch (e) {}
+
+          // Try to find leading image in markdown
+          var leadingImage = null
+          try {
+            if (data.markdown) {
+              var imgMatch = data.markdown.match(/!\[.*?\]\((.*?)\)/)
+              leadingImage = imgMatch ? imgMatch[1] : null
+            }
+          } catch (e) {}
+
+          // Use rendered HTML if available (better for preview), otherwise Markdown
+          var finalContent =
+            data.html || '<pre>' + (data.markdown || '') + '</pre>'
+
+          var thePageData = {
+            article: finalContent,
+            markdown: data.markdown || '',
+            url: window.location.href,
+            leadingImage: leadingImage,
+            mainImage: leadingImage,
+            pageNumber: 1,
+            description: (data.markdown || '')
+              .slice(0, 100)
+              .replace(/\n/g, ' '),
+            nextPage: 0,
+            title: title,
+            rtl: false,
+          }
+
+          console.log('Mdnice data', thePageData)
+          postToViewer(thePageData)
+          widgetDomMain.css('display', 'block')
+          postToViewer({ method: 'openPannel' })
+        })
+        .catch(function (e) {
+          console.log('Mdnice fetch error', e)
+          alert('无法从 Mdnice 提取文章: ' + e.message)
+        })
+      return
+    }
+
     // hasArticle();
     if (ReaderArticleFinderJS.isReaderModeAvailable()) {
       // showArticle();
@@ -239,15 +356,9 @@ display: none;">
           rtl: false,
         }
         console.log('', $widgetPage, $widgetPage[0], thePageData)
-        $widgetPage[0].contentWindow.postMessage(
-          JSON.stringify(thePageData),
-          '*'
-        )
+        postToViewer(thePageData)
         widgetDomMain.css('display', 'block')
-        $widgetPage[0].contentWindow.postMessage(
-          JSON.stringify({ method: 'openPannel' }),
-          '*'
-        )
+        postToViewer({ method: 'openPannel' })
       }
 
       setTimeout(() => {
@@ -269,15 +380,9 @@ display: none;">
             rtl: false,
           }
           console.log('', $widgetPage, $widgetPage[0], thePageData)
-          $widgetPage[0].contentWindow.postMessage(
-            JSON.stringify(thePageData),
-            '*'
-          )
+          postToViewer(thePageData)
           widgetDomMain.css('display', 'block')
-          $widgetPage[0].contentWindow.postMessage(
-            JSON.stringify({ method: 'openPannel' }),
-            '*'
-          )
+          postToViewer({ method: 'openPannel' })
         }
 
         setTimeout(() => {
@@ -317,7 +422,7 @@ display: none;">
     sendResponseA
   ) {
     console.log('page.js revice', request)
-    $widgetPage[0].contentWindow.postMessage(JSON.stringify(request), '*')
+    postToViewer(request)
   })
 }
 
@@ -344,13 +449,31 @@ if (!isEditorPage) {
 
 var methodManager = {
   fetchArticle: function (request, sender, sendResponse) {
-    initPageFetch(true)
+    // MV3 messaging: if the sender expects a response (background uses a callback),
+    // we must call sendResponse synchronously or keep the port open by returning true.
+    // Here we only need an ACK to avoid "The message port closed before a response was received."
+    try {
+      initPageFetch(true)
+      try {
+        sendResponse && sendResponse({ ok: true, started: true })
+      } catch (e) {
+        // ignore
+      }
+    } catch (e) {
+      try {
+        sendResponse &&
+          sendResponse({ ok: false, error: (e && e.message) || String(e) })
+      } catch (e2) {
+        // ignore
+      }
+    }
   },
 }
 
 chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
   if (request.method) {
-    methodManager[request.method](request, sender, sendResponse)
+    // Propagate return value in case a method wants to keep the message channel open.
+    return methodManager[request.method](request, sender, sendResponse)
   }
 })
 
@@ -413,3 +536,271 @@ if (
   console.log('skip')
 }
 // }
+
+function waitForElement(selector, timeout) {
+  timeout = timeout || 3000
+  return new Promise(function (resolve) {
+    var el = document.querySelector(selector)
+    if (el) {
+      return resolve(el)
+    }
+    var observer = new MutationObserver(function (mutations) {
+      var el = document.querySelector(selector)
+      if (el) {
+        resolve(el)
+        observer.disconnect()
+      }
+    })
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+    })
+    setTimeout(function () {
+      observer.disconnect()
+      resolve(null)
+    }, timeout)
+  })
+}
+
+function fetchMdniceArticle() {
+  // Return { markdown, html, saveTime }.
+  // Strategy:
+  // 0) Simulate "Copy to WeChat" click to ensure rendering
+  // 1) DOM preview container (#nice or common fallbacks) for HTML
+  // 2) Editor extraction (Ace / CodeMirror / Monaco / textarea) for Markdown
+  return new Promise(function (resolve, reject) {
+    // 0. Simulate click on "Copy to WeChat" if available to trigger rendering/formatting
+    var wechatBtn = document.querySelector('#nice-sidebar-wechat')
+    if (wechatBtn) {
+      console.log(
+        'Clicking #nice-sidebar-wechat to generate WeChat-ready content'
+      )
+      try {
+        wechatBtn.click()
+      } catch (e) {
+        console.warn('Failed to click wechat sidebar button', e)
+      }
+    }
+
+    setTimeout(
+      function () {
+        function safeGetText(el) {
+          try {
+            return el
+              ? el.value != null
+                ? el.value
+                : el.innerText || el.textContent || ''
+              : ''
+          } catch (e) {
+            return ''
+          }
+        }
+
+        function extractMarkdownFromEditors() {
+          // Ace
+          try {
+            var aceLines = document.querySelectorAll(
+              '.ace_text-layer .ace_line, .ace_line'
+            )
+            if (aceLines && aceLines.length) {
+              var lines = []
+              aceLines.forEach(function (line) {
+                lines.push(line.innerText)
+              })
+              return lines.join('\n')
+            }
+          } catch (e) {}
+
+          // CodeMirror 6 (DOM-based)
+          try {
+            var cm6Lines = document.querySelectorAll('.cm-editor .cm-line')
+            if (cm6Lines && cm6Lines.length) {
+              var cmLines = []
+              cm6Lines.forEach(function (line) {
+                cmLines.push(line.innerText)
+              })
+              // CM6 may represent empty doc as a single empty line; still fine.
+              return cmLines.join('\n')
+            }
+          } catch (e) {}
+
+          // CodeMirror 5 (instance attached to element.CodeMirror)
+          try {
+            var cmEl = document.querySelector('.CodeMirror')
+            if (cmEl && cmEl.CodeMirror && cmEl.CodeMirror.getValue) {
+              return cmEl.CodeMirror.getValue()
+            }
+          } catch (e) {}
+
+          // Monaco (best-effort)
+          try {
+            if (
+              window.monaco &&
+              window.monaco.editor &&
+              window.monaco.editor.getModels
+            ) {
+              var models = window.monaco.editor.getModels()
+              if (models && models.length && models[0].getValue) {
+                return models[0].getValue()
+              }
+            }
+          } catch (e) {}
+
+          // textarea fallback (mdnice often keeps a hidden textarea)
+          try {
+            var ta = document.querySelector(
+              'textarea[name="content"], textarea[name="markdown"], textarea#content, textarea#markdown, textarea'
+            )
+            var text = safeGetText(ta)
+            if (text && text.length > 0) return text
+          } catch (e) {}
+
+          return ''
+        }
+
+        function findPreviewHtml() {
+          // mdnice preview container historically uses #nice; add common fallbacks.
+          var selectors = [
+            '#nice',
+            '#preview',
+            '.preview',
+            '.preview-body',
+            '.output',
+            '.markdown-body',
+            '[data-testid="preview"]',
+          ]
+          for (var i = 0; i < selectors.length; i++) {
+            var el = document.querySelector(selectors[i])
+            if (el && el.innerHTML && el.innerHTML.trim().length > 0) {
+              return el.innerHTML
+            }
+          }
+          return ''
+        }
+
+        function findPreviewHtmlInSameOriginIframes() {
+          try {
+            var iframes = document.querySelectorAll('iframe')
+            for (var i = 0; i < iframes.length; i++) {
+              var iframe = iframes[i]
+              var doc = null
+              try {
+                doc =
+                  iframe.contentDocument ||
+                  (iframe.contentWindow && iframe.contentWindow.document)
+              } catch (e) {
+                doc = null
+              }
+              if (!doc) continue
+              try {
+                var html = ''
+                // reuse the same selectors
+                var selectors = [
+                  '#nice',
+                  '#preview',
+                  '.preview',
+                  '.preview-body',
+                  '.output',
+                  '.markdown-body',
+                  '[data-testid="preview"]',
+                ]
+                for (var j = 0; j < selectors.length; j++) {
+                  var el = doc.querySelector(selectors[j])
+                  if (el && el.innerHTML && el.innerHTML.trim().length > 0) {
+                    html = el.innerHTML
+                    break
+                  }
+                }
+                if (html && html.trim().length > 0) return html
+              } catch (e) {
+                // ignore this iframe
+              }
+            }
+          } catch (e) {}
+          return ''
+        }
+
+        function extractMarkdownFromSameOriginIframes() {
+          try {
+            var iframes = document.querySelectorAll('iframe')
+            for (var i = 0; i < iframes.length; i++) {
+              var iframe = iframes[i]
+              var win = null
+              var doc = null
+              try {
+                win = iframe.contentWindow
+                doc = iframe.contentDocument || (win && win.document)
+              } catch (e) {
+                win = null
+                doc = null
+              }
+              if (!doc) continue
+              try {
+                // Ace
+                var aceLines = doc.querySelectorAll(
+                  '.ace_text-layer .ace_line, .ace_line'
+                )
+                if (aceLines && aceLines.length) {
+                  var lines = []
+                  aceLines.forEach(function (line) {
+                    lines.push(line.innerText)
+                  })
+                  return lines.join('\n')
+                }
+                // CM6
+                var cm6Lines = doc.querySelectorAll('.cm-editor .cm-line')
+                if (cm6Lines && cm6Lines.length) {
+                  var cmLines = []
+                  cm6Lines.forEach(function (line) {
+                    cmLines.push(line.innerText)
+                  })
+                  return cmLines.join('\n')
+                }
+                // textarea
+                var ta = doc.querySelector(
+                  'textarea[name="content"], textarea[name="markdown"], textarea#content, textarea#markdown, textarea'
+                )
+                var text = safeGetText(ta)
+                if (text && text.length > 0) return text
+              } catch (e) {
+                // ignore
+              }
+            }
+          } catch (e) {}
+          return ''
+        }
+
+        function resolveWith(markdown, html) {
+          resolve({
+            markdown: markdown || '',
+            html: html || null,
+            saveTime: Date.now(),
+          })
+        }
+
+        // 1) DOM preview first (fast), and always try to also extract markdown.
+        waitForElement('#nice', 2000).then(function () {
+          var html = findPreviewHtml()
+          var markdown = extractMarkdownFromEditors()
+          if (!html) html = findPreviewHtmlInSameOriginIframes()
+          if (!markdown) markdown = extractMarkdownFromSameOriginIframes()
+          if (html && html.trim().length > 0) {
+            console.log('Mdnice: extracted HTML from preview container')
+            resolveWith(markdown, html)
+            return
+          }
+          if (markdown && markdown.trim().length > 0) {
+            console.log(
+              'Mdnice: extracted Markdown from editor (no preview html found)'
+            )
+            resolveWith(markdown, null)
+            return
+          }
+
+          reject(new Error('No content found via DOM'))
+        })
+      },
+      wechatBtn ? 1000 : 0
+    )
+  })
+}

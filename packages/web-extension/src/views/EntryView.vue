@@ -149,7 +149,9 @@
               <li v-for="account in accounts">
                 <a :href="account.home" target="_blank">
                   <img
-                    :src="account.avatar || account.icon || '/images/wordpress.ico'"
+                    :src="
+                      account.avatar || account.icon || '/images/wordpress.ico'
+                    "
                     class="icon"
                     height="20"
                   />
@@ -196,6 +198,15 @@
           >
             捐赠
           </button> -->
+
+            <button
+              class="btn btn-primary float-right"
+              type="button"
+              style="margin-right: 10px"
+              @click="extractArticle()"
+            >
+              提取文章
+            </button>
 
             <button
               class="btn btn-outline-secondary float-right"
@@ -400,6 +411,17 @@ export default {
     // this.checkRemoteDriver()
   },
   methods: {
+    extractArticle() {
+      // Send message to active tab to fetch article
+      chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+        if (tabs && tabs.length > 0) {
+          chrome.tabs.sendMessage(tabs[0].id, {
+            method: 'fetchArticle',
+          })
+          window.close() // Close popup so user can see the effect on the page
+        }
+      })
+    },
     updateDriverWithSrc(bundleFile) {
       if (this.updatingDriver) return
       this.updatingDriver = true

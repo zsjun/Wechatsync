@@ -35,8 +35,41 @@ if (window.location.href.indexOf('mp.weixin.qq.com') == -1) {
 }
 
 function sendToWindow(msg) {
-  msg.callReturn = true
-  window.postMessage(JSON.stringify(msg), '*')
+  // Some inpage scripts (e.g. MetaMask) listen to window "message" events and may
+  // crash if `event.data` is undefined. Ensure we never postMessage(undefined).
+  // Also ensure payload is JSON-serializable.
+  var payload = msg
+  if (payload == null || (typeof payload !== 'object' && typeof payload !== 'function')) {
+    payload = { result: payload }
+  }
+
+  try {
+    payload.callReturn = true
+  } catch (e) {
+    payload = { callReturn: true, result: null }
+  }
+
+  var data
+  try {
+    data = JSON.stringify(payload)
+  } catch (e) {
+    data = JSON.stringify({
+      callReturn: true,
+      result: null,
+      error: 'WCS: sendToWindow payload is not JSON-serializable',
+    })
+  }
+
+  // JSON.stringify(function(){}) returns undefined, which would break other listeners.
+  if (typeof data !== 'string') {
+    data = JSON.stringify({
+      callReturn: true,
+      result: null,
+      error: 'WCS: sendToWindow payload stringify returned non-string',
+    })
+  }
+
+  window.postMessage(data, '*')
 }
 
 chrome.runtime.onMessage.addListener(function (request, sender, sendResponseA) {
@@ -75,6 +108,7 @@ window.addEventListener('message', function (evt) {
   // if (evt.origin == 'https://www.wechatsync.com') {
   // console.log('from page', evt)
   try {
+    if (typeof evt.data !== 'string') return
     var action = JSON.parse(evt.data)
     if (action.method == 'getAccounts') {
       getAccounts(function () {

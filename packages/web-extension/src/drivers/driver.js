@@ -170,6 +170,22 @@ const chunk = (arr, size) => Array.from({ length: Math.ceil(arr.length / size) }
   arr.slice(i * size, i * size + size)
 );
 
+function withTimeout(promise, ms, onTimeout) {
+  let timer = null
+  const timeoutPromise = new Promise((resolve) => {
+    timer = setTimeout(() => {
+      try {
+        onTimeout && onTimeout()
+      } catch (e) {}
+      resolve(null)
+    }, ms)
+  })
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timer) clearTimeout(timer)
+  })
+}
+
 let _cacheUsers = null
 let _lastFetch = null
 
@@ -210,11 +226,16 @@ export async function getPublicAccounts() {
     new IPFSAdapter(),
   ]
 
-  var customDiscuzEndpoints = ['https://www.51hanghai.com'];
-  customDiscuzEndpoints.forEach(_ => {
-    drivers.push(new DiscuzAdapter({
-      url: _,
-   }));
+  // Discuz requires site-specific config/login and probing arbitrary endpoints can cause
+  // noisy errors + long timeouts in MV3 service worker. Users can add Discuz accounts
+  // explicitly via the UI, so don't auto-probe any Discuz endpoints by default.
+  var customDiscuzEndpoints = []
+  customDiscuzEndpoints.forEach((_) => {
+    drivers.push(
+      new DiscuzAdapter({
+        url: _,
+      })
+    )
   })
 
   Object.keys(_customDrivers).forEach(type => {
@@ -230,23 +251,26 @@ export async function getPublicAccounts() {
 
   const stepItems = chunk(drivers, 20);
   const startTime = Date.now()
+  const META_TIMEOUT_MS = 12 * 1000
   for (let index = 0; index < stepItems.length; index++) {
     try {
       const stepItem = stepItems[index];
       const results = await Promise.all(
         stepItem.map((driver) => {
-          return new Promise((resolve, reject) => {
-            const driverName = driver.name || driver.constructor?.name || 'unknown'
-            driver.getMetaData().then(
-              (result) => {
-                console.log(`[WCS] ${driverName} getMetaData success:`, result?.title || result)
-                resolve(result)
-              },
-              (error) => {
-                console.warn(`[WCS] ${driverName} getMetaData failed:`, error?.message || error)
-                resolve(null)
-              }
-            )
+          const driverName = driver.name || driver.constructor?.name || 'unknown'
+          const metaPromise = driver
+            .getMetaData()
+            .then((result) => {
+              console.log(`[WCS] ${driverName} getMetaData success:`, result?.title || result)
+              return result
+            })
+            .catch((error) => {
+              console.warn(`[WCS] ${driverName} getMetaData failed:`, error?.message || error)
+              return null
+            })
+
+          return withTimeout(metaPromise, META_TIMEOUT_MS, () => {
+            console.warn(`[WCS] ${driverName} getMetaData timeout after ${META_TIMEOUT_MS}ms`)
           })
         })
       );
