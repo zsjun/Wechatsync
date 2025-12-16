@@ -6,8 +6,9 @@ export function readFileToBase64(url) {
     ;(async () => {
       let body = null
       try {
-        const req = await axios.get(url, { responseType: 'blob' })
-        body = req.data
+        // Replace axios with fetch for Service Worker compatibility
+        const res = await fetch(url)
+        body = await res.blob()
       } catch (e) {
         return reject(e)
       }

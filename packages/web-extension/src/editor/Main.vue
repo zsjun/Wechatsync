@@ -193,7 +193,11 @@ export default {
 
     const self = this
 
-    chrome.runtime.onMessage.addListener(function (request, sender, sendResponseA) {
+    chrome.runtime.onMessage.addListener(function (
+      request,
+      sender,
+      sendResponseA
+    ) {
       console.log('content.js revice', request)
       try {
         console.log('revice', request)
@@ -201,6 +205,7 @@ export default {
           // buildStatusHtml(request.task)
           self.taskStatus = request.task
         }
+        sendResponseA && sendResponseA({ status: 'ok' })
       } catch (e) {
         console.log(e)
       }

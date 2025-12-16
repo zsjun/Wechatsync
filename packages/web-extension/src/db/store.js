@@ -98,8 +98,7 @@ export default class Store {
           // console.log(chrome.runtime.lastError);
           chrome.tabs.sendMessage(
             sender.tab.id,
-            { method: 'taskUpdate', task: tasks[tid] },
-            function (response) {}
+            { method: 'taskUpdate', task: tasks[tid] }
           )
         } catch (e) {}
       }

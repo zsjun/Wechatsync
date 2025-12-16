@@ -20,7 +20,10 @@
                     height="20"
                     style="vertical-align: -6px; height: 20px !important"
                   />
-                  {{ account.title }}
+                  <span style="color: #999; margin-right: 5px">{{
+                    getAccountPrefix(account)
+                  }}</span
+                  >{{ account.title }}
                 </el-checkbox>
               </div>
             </div>
@@ -239,6 +242,25 @@ export default {
     // tracker.sendAppView('ArticleView')
   },
   methods: {
+    getAccountPrefix(account) {
+      if (account.displayName) return account.displayName
+      const typeMap = {
+        wechat: '微信公众号',
+        zhihu: '知乎',
+        juejin: '掘金',
+        wordpress: 'WordPress',
+        typecho: 'Typecho',
+        'jian-shu': '简书',
+        csdn: 'CSDN',
+        segmentfault: 'SegmentFault',
+        oschina: '开源中国',
+        cnblogs: '博客园',
+        toutiao: '今日头条',
+        163: '网易号',
+        douban: '豆瓣',
+      }
+      return typeMap[account.type] || account.type
+    },
     taskUpdate(task) {
       this.taskStatus = task
       var currentAccount = task.accounts.filter((a) => {
@@ -304,10 +326,16 @@ export default {
           },
           function (resp) {
             console.log('allAccounts', resp)
-            self.allAccounts = resp.filter((item) => {
-              if (!item.supportTypes) return true
-              return item.supportTypes.indexOf(self.contentType) > -1
-            })
+            self.allAccounts = resp
+              .filter((item) => {
+                if (!item.supportTypes) return true
+                return item.supportTypes.indexOf(self.contentType) > -1
+              })
+              .map((account) => ({
+                ...account,
+                // CRITICAL FIX: Ensure checked property exists for Vue checkbox binding
+                checked: account.checked !== undefined ? account.checked : false,
+              }))
           }
         )
       }
@@ -380,7 +408,8 @@ export default {
         post.content = originalHtml
         post.inline_content = self.$refs.viewport.innerHTML
         // If source provides markdown (e.g. mdnice), carry it through for per-platform publishing decisions.
-        post.markdown = self.pageData && self.pageData.markdown ? self.pageData.markdown : ''
+        post.markdown =
+          self.pageData && self.pageData.markdown ? self.pageData.markdown : ''
         post.thumb = self.pageData.mainImage
         if (!post.thumb) {
           post.thumb = self.pageData.leadingImage

@@ -1,4 +1,3 @@
-
 import { readFileToBase64 } from './file'
 
 function getDataUrl(srcUrl, cb) {
@@ -52,18 +51,37 @@ export function upImage(driver, src, postId, name) {
           }
         )
     } else {
-      (async () => {
+      ;(async () => {
         try {
-          var sourceIsBase64 = src.indexOf(';base64,') > -1;
+          var sourceIsBase64 = src.indexOf(';base64,') > -1
           var dataURL = sourceIsBase64 ? src : await readFileToBase64(src)
           var dataURLPairs = dataURL.split(',')
           var fileType = dataURLPairs[0].replace('data:', '').split(';')[0]
           var baseCode = dataURLPairs[1]
+          var bits = null
+          // Use XMLRPC binary only for WordPress/Typecho if they rely on it
+          // But Juejin/others need raw bytes (Uint8Array)
+          if (
+            (driver.type === 'wordpress' || driver.type === 'typecho') &&
+            $ &&
+            $.xmlrpc &&
+            $.xmlrpc.binary
+          ) {
+            bits = $.xmlrpc.binary.fromBase64(baseCode)
+          } else {
+            const binaryString = atob(baseCode)
+            const len = binaryString.length
+            const bytes = new Uint8Array(len)
+            for (let i = 0; i < len; i++) {
+              bytes[i] = binaryString.charCodeAt(i)
+            }
+            bits = bytes
+          }
           var uploadData = {
             post_id: postId + '',
             name: name,
             type: fileType || 'image/png',
-            bits: $.xmlrpc.binary.fromBase64(baseCode),
+            bits: bits,
             overwrite: true,
             src: src,
           }
@@ -72,7 +90,7 @@ export function upImage(driver, src, postId, name) {
           driver
             .uploadFile(uploadData)
             .then(
-              function(res, status, xhr) {
+              function (res, status, xhr) {
                 console.log(res)
                 if (status == 'success' || res) {
                   var object = res[0]
@@ -82,7 +100,7 @@ export function upImage(driver, src, postId, name) {
                   reject()
                 }
               },
-              function(xhr, status, error) {
+              function (xhr, status, error) {
                 console.log(arguments)
                 if (error) {
                   reject(error)
@@ -91,7 +109,7 @@ export function upImage(driver, src, postId, name) {
                 }
               }
             )
-            .catch(function(e) {
+            .catch(function (e) {
               console.log('uploadFile.catch', e)
               reject(e)
             })
@@ -99,7 +117,7 @@ export function upImage(driver, src, postId, name) {
           console.log('uploadFile.error', e)
           reject(e)
         }
-      })();
+      })()
     }
   })
 }

@@ -82,6 +82,42 @@
         <template v-if="!checking">添加</template>
       </button>
     </div>
+
+    <div
+      v-if="type && type != 'wordpress' && type != 'typecho'"
+      class="add-account-form"
+      style="text-align: center; padding: 20px"
+    >
+      <div style="margin-bottom: 20px">
+        <template v-for="driver in drivers">
+          <img v-if="driver.type == type" :src="driver.icon" width="64" />
+        </template>
+      </div>
+      <p>
+        请确保您已在当前浏览器中登录该平台。
+        <br />
+        如果是首次添加，请点击下方链接登录，然后返回此处点击确认添加。
+      </p>
+
+      <p v-for="driver in drivers">
+        <a
+          v-if="driver.type == type && driver.home"
+          :href="driver.home"
+          target="_blank"
+          class="btn btn-outline-primary btn-sm"
+          >前往登录</a
+        >
+      </p>
+
+      <button
+        type="submit"
+        class="btn btn-success btn-lg btn-block mt-4"
+        @click="create"
+      >
+        <template v-if="checking">检测中...</template>
+        <template v-if="!checking">我已登录，确认添加</template>
+      </button>
+    </div>
   </section>
 </template>
 
@@ -137,12 +173,12 @@ export default {
           icon: 'https://cdn2.jianshu.io/assets/favicons/favicon-e743bfb1821442341c3ab15bdbe804f7ad97676bd07a770ccc9483473aa76f06.ico',
           name: '简书',
         },
-        // {
-        //   type: 'juejin',
-        //   home: 'https://juejin.im/editor/drafts',
-        //   icon: 'https://gold-cdn.xitu.io/favicons/favicon.ico',
-        //   name: '掘金',
-        // },
+        {
+          type: 'juejin',
+          home: 'https://juejin.cn/editor/drafts',
+          icon: 'https://juejin.cn/favicon.ico',
+          name: '掘金',
+        },
         // {
         //   type: 'csdn',
         //   home: 'https://i.csdn.net',
@@ -198,7 +234,21 @@ export default {
             return
           }
 
-          var blogs = response.result
+          var result = response.result
+
+          // Handle standard drivers (Juejin, Zhihu, etc) that return user info directly
+          if (self.type != 'wordpress' && self.type != 'typecho') {
+            ;(async () => {
+              await window.db.addAccount(result)
+              alert('添加成功 -> ' + result.title)
+              self.checking = false
+              self.$router.back()
+            })()
+            return
+          }
+
+          // Handle WordPress/Typecho (XML-RPC response structure)
+          var blogs = result
           try {
             var blogMeta = blogs.response[0][0]
             ;(async () => {
@@ -219,7 +269,7 @@ export default {
             })()
           } catch (e) {
             self.checking = false
-            alert(e.toString())
+            alert('添加失败: ' + e.toString())
           }
         }
       )

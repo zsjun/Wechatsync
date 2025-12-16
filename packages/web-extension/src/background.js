@@ -15,6 +15,8 @@ import {
 
 import * as localDriver from './drivers/driver'
 import axiosLib from 'axios'
+import TurndownService from 'turndown'
+import tools from '@wechatsync/drivers/tools/index.js'
 
 // Drivers (from @wechatsync/drivers) call `modifyRequestHeaders(...)` as a free identifier.
 // Define it in *module scope* (so bundling keeps it and the identifier resolves),
@@ -40,11 +42,16 @@ if (typeof window === 'undefined') {
 
 // axios 全局变量
 globalThis.axios = axiosLib
+globalThis.turndown = TurndownService
+globalThis.tools = tools
 
 // jQuery shim - 使用原生 fetch 带上 Cookie
-const $ = function(selector) {
+const $ = function (selector) {
   // 如果是 HTML 字符串，用 cheerio 解析
-  if (typeof selector === 'string' && (selector.startsWith('<') || selector.includes('<'))) {
+  if (
+    typeof selector === 'string' &&
+    (selector.startsWith('<') || selector.includes('<'))
+  ) {
     return load(selector, { decodeEntities: false }, false)
   }
   // 否则返回 cheerio 的 root
@@ -52,7 +59,7 @@ const $ = function(selector) {
 }
 
 // $.get - GET 请求（自动解析 JSON）
-$.get = async function(url) {
+$.get = async function (url) {
   const res = await fetch(url, { credentials: 'include' })
   const text = await res.text()
   try {
@@ -63,12 +70,13 @@ $.get = async function(url) {
 }
 
 // $.post - POST 请求（自动解析 JSON）
-$.post = async function(url, data) {
+$.post = async function (url, data) {
   const res = await fetch(url, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: typeof data === 'string' ? data : new URLSearchParams(data).toString()
+    body:
+      typeof data === 'string' ? data : new URLSearchParams(data).toString(),
   })
   const text = await res.text()
   try {
@@ -79,26 +87,33 @@ $.post = async function(url, data) {
 }
 
 // $.ajax - 通用 AJAX 请求（自动解析 JSON）
-$.ajax = async function(settings) {
+$.ajax = async function (settings) {
   const method = (settings.type || settings.method || 'GET').toUpperCase()
   const fetchOptions = {
     method,
     credentials: 'include',
-    headers: { ...(settings.headers || {}) }
+    headers: { ...(settings.headers || {}) },
   }
-  
+
   if (method !== 'GET' && settings.data) {
-    if (settings.dataType === 'JSON' || settings.contentType === 'application/json') {
+    if (
+      settings.dataType === 'JSON' ||
+      settings.contentType === 'application/json'
+    ) {
       fetchOptions.headers['Content-Type'] = 'application/json'
-      fetchOptions.body = typeof settings.data === 'string' ? settings.data : JSON.stringify(settings.data)
+      fetchOptions.body =
+        typeof settings.data === 'string'
+          ? settings.data
+          : JSON.stringify(settings.data)
     } else {
       fetchOptions.headers['Content-Type'] = 'application/x-www-form-urlencoded'
-      fetchOptions.body = typeof settings.data === 'string' 
-        ? settings.data 
-        : new URLSearchParams(settings.data).toString()
+      fetchOptions.body =
+        typeof settings.data === 'string'
+          ? settings.data
+          : new URLSearchParams(settings.data).toString()
     }
   }
-  
+
   const res = await fetch(settings.url, fetchOptions)
   const text = await res.text()
   try {
@@ -145,16 +160,20 @@ function brodcastToWatcher(args) {
   for (let index = 0; index < tabIds.length; index++) {
     const logWatcher = logWatchers[tabIds[index]]
     // console.log('brodcastToWatcher', logWatcher, args)
-    chrome.tabs.sendMessage(
-      logWatcher.tab.id,
-      { method: 'consoleLog', args: args },
-      function (response) {}
-    )
+    chrome.tabs.sendMessage(logWatcher.tab.id, {
+      method: 'consoleLog',
+      args: args,
+    })
   }
 }
 
 // var service = analytics.getService('syncer')
 // var tracker = service.getTracker('UA-48134052-13')
+var tracker = {
+  sendEvent: function (category, action, label) {
+    console.log('tracker.sendEvent (mock)', category, action, label)
+  },
+}
 
 let getDriver = localDriver.getDriver
 let getPublicAccounts = localDriver.getPublicAccounts
@@ -393,69 +412,86 @@ class Syner {
 
       if (request.action && request.action == 'getAccount') {
         ;(async () => {
-          const accounts = await db.getAccounts()
-          sendResponseA(accounts.concat(publicAccounts))
-          // if (request.force) {
-          publicAccounts = await getPublicAccounts()
-          // }
+          try {
+            const accounts = await db.getAccounts()
+            // CRITICAL FIX: Wait for publicAccounts BEFORE responding
+            // This ensures Juejin (and other auto-detected accounts) are available
+            if (!publicAccounts || publicAccounts.length === 0) {
+              console.log('[WCS] getAccount: publicAccounts empty, fetching...')
+              publicAccounts = await getPublicAccounts()
+            }
+            sendResponseA(accounts.concat(publicAccounts))
+          } catch (e) {
+            console.error('getAccount error', e)
+            sendResponseA([])
+          }
         })()
         return true
       }
 
       // MV3: 使用 chrome.scripting.executeScript 在页面主世界获取全局变量
       if (request.action && request.action == 'getPageGlobals') {
-        chrome.scripting.executeScript({
-          target: { tabId: sender.tab.id },
-          world: 'MAIN',
-          func: () => {
-            // 在页面主世界执行，可以访问页面的全局变量
-            // 使用 try-catch 避免影响页面
-            try {
-              return {
-                title: typeof msg_title !== 'undefined' ? msg_title : null,
-                desc: typeof msg_desc !== 'undefined' ? msg_desc : null,
-                thumb: typeof msg_cdn_url !== 'undefined' ? msg_cdn_url : null,
-                nickname: typeof nickname !== 'undefined' ? nickname : null,
-                publish_time: typeof ct !== 'undefined' ? ct : null,
+        chrome.scripting
+          .executeScript({
+            target: { tabId: sender.tab.id },
+            world: 'MAIN',
+            func: () => {
+              // 在页面主世界执行，可以访问页面的全局变量
+              // 使用 try-catch 避免影响页面
+              try {
+                return {
+                  title: typeof msg_title !== 'undefined' ? msg_title : null,
+                  desc: typeof msg_desc !== 'undefined' ? msg_desc : null,
+                  thumb:
+                    typeof msg_cdn_url !== 'undefined' ? msg_cdn_url : null,
+                  nickname: typeof nickname !== 'undefined' ? nickname : null,
+                  publish_time: typeof ct !== 'undefined' ? ct : null,
+                }
+              } catch (e) {
+                return null
               }
-            } catch (e) {
-              return null
-            }
-          }
-        }).then(results => {
-          console.log('[WCS] getPageGlobals result:', results)
-          sendResponseA(results[0]?.result || null)
-        }).catch(err => {
-          console.error('[WCS] getPageGlobals error:', err)
-          sendResponseA(null)
-        })
+            },
+          })
+          .then((results) => {
+            console.log('[WCS] getPageGlobals result:', results)
+            sendResponseA(results[0]?.result || null)
+          })
+          .catch((err) => {
+            console.error('[WCS] getPageGlobals error:', err)
+            sendResponseA(null)
+          })
         return true
       }
 
       if (request.action && request.action == 'addTask') {
         console.log(request)
         ;(async () => {
-          request.task.status = 'wait'
-          request.task.guid = getGuid()
-          await db.addTask(request.task)
-          // brocast message to the front end
-          self.senders[request.task.guid] = sender
-          sendResponseA(request.task.guid)
           try {
-            var newTask = request.task
-            tracker.sendEvent('add', 'link', request.task.post.link)
-            tracker.sendEvent(
-              'add',
-              'title',
-              [
-                request.task.post.title,
-                newTask.accounts.map((account) => {
-                  return [account.type, account.uid, account.title].join('-')
-                }),
-              ].join(';;')
-            )
+            request.task.status = 'wait'
+            request.task.guid = getGuid()
+            await db.addTask(request.task)
+            // brocast message to the front end
+            self.senders[request.task.guid] = sender
+            sendResponseA(request.task.guid)
+            try {
+              var newTask = request.task
+              tracker.sendEvent('add', 'link', request.task.post.link)
+              tracker.sendEvent(
+                'add',
+                'title',
+                [
+                  request.task.post.title,
+                  newTask.accounts.map((account) => {
+                    return [account.type, account.uid, account.title].join('-')
+                  }),
+                ].join(';;')
+              )
+            } catch (e) {
+              console.log(e)
+            }
           } catch (e) {
-            console.log(e)
+            console.error('addTask error', e)
+            sendResponseA(null)
           }
         })()
         return true
@@ -472,6 +508,9 @@ class Syner {
             })
           } catch (e) {
             console.log(e)
+            sendResponseA({
+              error: e.toString(),
+            })
           }
         })()
         return true
@@ -499,6 +538,7 @@ class Syner {
           d[request.name] = request.value
           chrome.storage.local.set(d, function () {
             console.log('cache set')
+            sendResponseA({ status: 'ok' })
           })
         })()
         return true
@@ -516,6 +556,7 @@ class Syner {
           // chrome.storage.local.set(d, function() {
           //   console.log('cache set')
           // })
+          sendResponseA({ status: 'ok' })
         })()
         return true
       }
@@ -525,6 +566,7 @@ class Syner {
         // logWatchers.push(sender)
         logWatchers[sender.tab.id] = sender
         startInspectInject()
+        sendResponseA({ status: 'ok' })
       }
 
       if (request.action && request.action == 'updateDriver') {
@@ -586,6 +628,7 @@ class Syner {
               if (isDevelopment) {
                 setDriver(newDriver)
                 // dynamic reload not store
+                sendResponseA({ status: 1 })
               } else {
                 // if (newDriverMeta.versionNumber > window.driverMeta.versionNumber) {
                 chrome.storage.local.set(
@@ -817,7 +860,8 @@ class Syner {
       if (
         postContent &&
         postContent.markdown &&
-        (!postContent[`content_${account.type}`] || postContent[`content_${account.type}`].trim() === '') &&
+        (!postContent[`content_${account.type}`] ||
+          postContent[`content_${account.type}`].trim() === '') &&
         account &&
         account.supportTypes &&
         account.supportTypes.indexOf('markdown') > -1
@@ -875,8 +919,8 @@ class Syner {
 
     postId = addResp.post_id ? addResp.post_id : addResp.response
     account.post_id = postId
-    var doc = $(postContent.content)
-    var imags = doc.find('img')
+    var doc = $(postContent.content || '')
+    var imags = doc('img')
     console.log('upload images', imags.length)
     account.totalImages = imags.length
     account.uploadedCount = 1
@@ -952,7 +996,7 @@ class Syner {
     }
 
     console.log('upload images done')
-    postContent.content = $('<div>').append(doc.clone()).html()
+    postContent.content = doc.html()
 
     // 设置缩略图
     var post_thumbnail = null
@@ -995,17 +1039,22 @@ class Syner {
       )
     } catch (e) {
       console.log('editPost failed：', e)
+      editResp = { status: 'failed', error: e.message || e }
     }
 
     account.editResp = editResp
-    account.status = 'done'
+    account.status =
+      editResp && editResp.status === 'success' ? 'done' : 'failed'
+    if (account.status === 'failed' && editResp && editResp.error) {
+      account.error = editResp.error
+    }
 
     db.editTask(currentTask.tid, {
       accounts: currentTask.accounts,
     })
 
     console.log('editResp status')
-    if (editResp.status == 'success') {
+    if (editResp && editResp.status == 'success') {
       db.editTask(currentTask.tid, {
         status: 'done',
         endTime: Date.now(),
@@ -1096,12 +1145,22 @@ function onContextMenuClicked(info, tab) {
           target: { tabId: tab.id },
           // page.js depends on jquery/Readability/reader helpers when running as a content script.
           // Inject them together to avoid runtime errors when site access was previously disabled.
-          files: ['libs/juqery.js', 'libs/Readability.js', 'libs/reader.js', 'page.js'],
+          files: [
+            'libs/juqery.js',
+            'libs/Readability.js',
+            'libs/reader.js',
+            'page.js',
+          ],
         })
         chrome.tabs.sendMessage(tab.id, msg, () => {
           if (chrome.runtime.lastError) {
-            console.warn('[WCS] retry sendMessage(fetchArticle) failed:', chrome.runtime.lastError?.message)
-            notifyFetchArticleFailed(chrome.runtime.lastError?.message || '无法发送消息到页面')
+            console.warn(
+              '[WCS] retry sendMessage(fetchArticle) failed:',
+              chrome.runtime.lastError?.message
+            )
+            notifyFetchArticleFailed(
+              chrome.runtime.lastError?.message || '无法发送消息到页面'
+            )
           }
         })
       } catch (e) {
@@ -1115,19 +1174,19 @@ function onContextMenuClicked(info, tab) {
 }
 
 function createSharedContextmenu() {
-  chrome.contextMenus.removeAll(function() {
+  chrome.contextMenus.removeAll(function () {
     sharedContextmenuId = chrome.contextMenus.create({
       id: 'getAttrile',
       title: '提取文章并同步',
       contexts: ['all'],
     })
-    
+
     // MV3: cannot pass `onclick` to create(); must use onClicked event.
     if (!_contextMenuListenerBound) {
       chrome.contextMenus.onClicked.addListener(onContextMenuClicked)
       _contextMenuListenerBound = true
     }
-  });
+  })
 }
 
 function removeSharedContextmenu() {

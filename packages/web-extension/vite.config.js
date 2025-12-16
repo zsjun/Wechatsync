@@ -42,7 +42,7 @@ export default defineConfig({
       // Fix for entities deep import issues in juice/cheerio
       'entities/escape': path.resolve(
         __dirname,
-        '../../node_modules/entities/lib/encode.js'
+        '../../node_modules/entities/lib/escape.js'
       ),
       'entities/encode': path.resolve(
         __dirname,
@@ -81,6 +81,7 @@ export default defineConfig({
         segmenftfault: path.resolve(__dirname, 'src/segmenftfault.js'),
         autoformat: path.resolve(__dirname, 'src/autoformat.js'),
         api: path.resolve(__dirname, 'src/api.js'),
+        offscreen: path.resolve(__dirname, 'src/offscreen.html'),
       },
       output: {
         entryFileNames: '[name].js',

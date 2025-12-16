@@ -423,6 +423,7 @@ display: none;">
   ) {
     console.log('page.js revice', request)
     postToViewer(request)
+    sendResponseA && sendResponseA({ status: 'ok' })
   })
 }
 
@@ -576,6 +577,10 @@ function fetchMdniceArticle() {
         'Clicking #nice-sidebar-wechat to generate WeChat-ready content'
       )
       try {
+        // Remove target="_blank" to prevent opening new tab if possible
+        if (wechatBtn.getAttribute('target') === '_blank') {
+          wechatBtn.removeAttribute('target')
+        }
         wechatBtn.click()
       } catch (e) {
         console.warn('Failed to click wechat sidebar button', e)
@@ -779,28 +784,72 @@ function fetchMdniceArticle() {
         }
 
         // 1) DOM preview first (fast), and always try to also extract markdown.
-        waitForElement('#nice', 2000).then(function () {
+        var selectors = [
+          '#nice',
+          '#preview',
+          '.preview',
+          '.preview-body',
+          '.output',
+          '.markdown-body',
+          '[data-testid="preview"]',
+        ]
+
+        function checkSelectors() {
+          for (var i = 0; i < selectors.length; i++) {
+            if (document.querySelector(selectors[i])) return true
+          }
+          // Also check iframes
+          try {
+            var iframes = document.querySelectorAll('iframe')
+            for (var i = 0; i < iframes.length; i++) {
+              var doc =
+                iframes[i].contentDocument || iframes[i].contentWindow?.document
+              if (doc) {
+                for (var j = 0; j < selectors.length; j++) {
+                  if (doc.querySelector(selectors[j])) return true
+                }
+              }
+            }
+          } catch (e) {}
+          return false
+        }
+
+        function runExtract() {
           var html = findPreviewHtml()
           var markdown = extractMarkdownFromEditors()
           if (!html) html = findPreviewHtmlInSameOriginIframes()
           if (!markdown) markdown = extractMarkdownFromSameOriginIframes()
+
           if (html && html.trim().length > 0) {
             console.log('Mdnice: extracted HTML from preview container')
             resolveWith(markdown, html)
-            return
+            return true
           }
           if (markdown && markdown.trim().length > 0) {
-            console.log(
-              'Mdnice: extracted Markdown from editor (no preview html found)'
-            )
+            console.log('Mdnice: extracted Markdown from editor')
             resolveWith(markdown, null)
-            return
+            return true
           }
+          return false
+        }
 
-          reject(new Error('No content found via DOM'))
-        })
+        // Try immediately
+        if (runExtract()) return
+
+        // If not found, wait a bit (only if we clicked the button and might be waiting for render)
+        var attempts = 0
+        var interval = setInterval(function () {
+          attempts++
+          if (runExtract() || attempts > 10) {
+            // Try for ~2 seconds (10 * 200ms)
+            clearInterval(interval)
+            if (attempts > 10) {
+              reject(new Error('No content found via DOM after waiting'))
+            }
+          }
+        }, 200)
       },
-      wechatBtn ? 1000 : 0
+      wechatBtn ? 500 : 0 // Reduce initial delay
     )
   })
 }
