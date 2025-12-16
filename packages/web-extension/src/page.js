@@ -1,4 +1,21 @@
-console.log('page.js', ReaderArticleFinderJS, 'Readability', Readability)
+// Log immediately when script starts executing (before any dependencies)
+console.log('[WCS] page.js script executing at:', new Date().toISOString())
+console.log('[WCS] page.js URL:', window.location.href)
+
+// Check dependencies after they should be loaded
+try {
+  console.log('[WCS] page.js loaded', {
+    hasReaderArticleFinderJS: !!ReaderArticleFinderJS,
+    hasReadability: !!Readability,
+    url: window.location.href,
+    hostname: window.location.hostname,
+    isMdnice: window.location.hostname.includes('mdnice.com'),
+    hasJQuery: typeof $ !== 'undefined'
+  })
+} catch (e) {
+  console.error('[WCS] page.js: Error checking dependencies:', e)
+}
+console.log('[WCS] page.js: Message listener will be registered')
 
 function initPageFetch(isForceShow) {
   if ($('#syncd-pannel').length == 0)
@@ -279,17 +296,43 @@ display: none;">
   }
 
   if (isForceShow) {
+    console.log('[WCS] initPageFetch called with isForceShow=true, hostname:', window.location.hostname)
     if (window.location.hostname.includes('mdnice.com')) {
+      console.log('[WCS] Detected mdnice.com, calling fetchMdniceArticle()')
       // Mdnice Special Logic
       fetchMdniceArticle()
         .then(function (data) {
-          var title = 'Mdnice 文章'
-          try {
-            if (data.markdown) {
-              var titleMatch = data.markdown.match(/^#+\s+(.*)/m)
-              if (titleMatch) title = titleMatch[1].trim()
+          console.log('[WCS] fetchMdniceArticle resolved with data:', {
+            hasTitle: !!data.title,
+            hasMarkdown: !!data.markdown,
+            hasHtml: !!data.html,
+            title: data.title
+          })
+          // Use title from fetchMdniceArticle if available, otherwise try to extract from markdown
+          var title = data.title || 'Mdnice 文章'
+          
+          // If title wasn't found, try to extract from markdown
+          if (title === 'Mdnice 文章' && data.markdown) {
+            try {
+              // Try multiple patterns:
+              // 1. Title at the very start: ^#\s+(.+)$
+              // 2. First h1 in the document: ^#+\s+(.+)$
+              var titleMatch = data.markdown.match(/^#\s+(.+)$/m) || 
+                               data.markdown.match(/^#+\s+(.+)$/m)
+              if (titleMatch && titleMatch[1]) {
+                title = titleMatch[1].trim()
+                console.log('[WCS] Mdnice: Found title from markdown:', title)
+              }
+            } catch (e) {
+              console.warn('[WCS] Mdnice: Failed to extract title from markdown', e)
             }
-          } catch (e) {}
+          }
+          
+          if (title && title !== 'Mdnice 文章') {
+            console.log('[WCS] Mdnice: Using extracted title:', title)
+          } else {
+            console.warn('[WCS] Mdnice: Could not extract title, using default')
+          }
 
           // Try to find leading image in markdown
           var leadingImage = null
@@ -325,7 +368,7 @@ display: none;">
           postToViewer({ method: 'openPannel' })
         })
         .catch(function (e) {
-          console.log('Mdnice fetch error', e)
+          console.error('[WCS] Mdnice fetch error', e)
           alert('无法从 Mdnice 提取文章: ' + e.message)
         })
       return
@@ -450,33 +493,58 @@ if (!isEditorPage) {
 
 var methodManager = {
   fetchArticle: function (request, sender, sendResponse) {
+    console.log('[WCS] fetchArticle called', request, window.location.href)
     // MV3 messaging: if the sender expects a response (background uses a callback),
     // we must call sendResponse synchronously or keep the port open by returning true.
     // Here we only need an ACK to avoid "The message port closed before a response was received."
     try {
+      console.log('[WCS] Calling initPageFetch(true)')
       initPageFetch(true)
       try {
         sendResponse && sendResponse({ ok: true, started: true })
       } catch (e) {
-        // ignore
+        console.warn('[WCS] Error sending response:', e)
       }
     } catch (e) {
+      console.error('[WCS] Error in fetchArticle:', e)
       try {
         sendResponse &&
           sendResponse({ ok: false, error: (e && e.message) || String(e) })
       } catch (e2) {
-        // ignore
+        console.warn('[WCS] Error sending error response:', e2)
       }
     }
   },
 }
 
+// Register message listener immediately
+console.log('[WCS] Registering chrome.runtime.onMessage listener')
 chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
+  console.log('[WCS] Message received:', request.method, request, 'from:', sender)
   if (request.method) {
+    if (!methodManager[request.method]) {
+      console.error('[WCS] Method not found in methodManager:', request.method, 'Available methods:', Object.keys(methodManager))
+      return false
+    }
     // Propagate return value in case a method wants to keep the message channel open.
-    return methodManager[request.method](request, sender, sendResponse)
+    try {
+      var result = methodManager[request.method](request, sender, sendResponse)
+      console.log('[WCS] Method handler result:', result)
+      return result
+    } catch (e) {
+      console.error('[WCS] Error in method handler:', e)
+      try {
+        sendResponse && sendResponse({ ok: false, error: e.message || String(e) })
+      } catch (e2) {
+        console.error('[WCS] Error sending error response:', e2)
+      }
+      return false
+    }
   }
+  console.warn('[WCS] Message received without method:', request)
+  return false
 })
+console.log('[WCS] Message listener registered successfully')
 
 // window.frames['uchome-ifrHtmlEditor'].window.frames['HtmlEditor'].document.body.innerHTML
 // window.onload = function() {
@@ -564,12 +632,14 @@ function waitForElement(selector, timeout) {
 }
 
 function fetchMdniceArticle() {
+  console.log('[WCS] fetchMdniceArticle() called')
   // Return { markdown, html, saveTime }.
   // Strategy:
   // 0) Simulate "Copy to WeChat" click to ensure rendering
   // 1) DOM preview container (#nice or common fallbacks) for HTML
   // 2) Editor extraction (Ace / CodeMirror / Monaco / textarea) for Markdown
   return new Promise(function (resolve, reject) {
+    console.log('[WCS] fetchMdniceArticle: Promise started')
     // 0. Simulate click on "Copy to WeChat" if available to trigger rendering/formatting
     var wechatBtn = document.querySelector('#nice-sidebar-wechat')
     if (wechatBtn) {
@@ -775,11 +845,117 @@ function fetchMdniceArticle() {
           return ''
         }
 
+        function extractTitle() {
+          console.log('Mdnice: Starting title extraction...')
+          
+          // Strategy 1: Try to find title input field in mdnice editor (multiple selectors)
+          try {
+            var titleSelectors = [
+              'input[placeholder*="标题"]',
+              'input[name="title"]',
+              'input[id*="title"]',
+              '.title-input input',
+              '#title-input',
+              'input[type="text"][placeholder*="title" i]',
+              '.editor-title input',
+              '[data-testid="title-input"]',
+              'input.editor-title'
+            ]
+            
+            for (var s = 0; s < titleSelectors.length; s++) {
+              try {
+                var titleInput = document.querySelector(titleSelectors[s])
+                if (titleInput) {
+                  var titleValue = titleInput.value || titleInput.getAttribute('value') || ''
+                  if (titleValue && titleValue.trim()) {
+                    console.log('Mdnice: Found title from input field (' + titleSelectors[s] + '):', titleValue.trim())
+                    return titleValue.trim()
+                  }
+                }
+              } catch (e) {
+                // Continue to next selector
+              }
+            }
+          } catch (e) {
+            console.warn('Mdnice: Error extracting title from input fields', e)
+          }
+          
+          // Strategy 2: Try to extract from HTML preview (h1 tag in preview container)
+          try {
+            var previewSelectors = ['#nice', '#preview', '.preview', '.preview-body', '.output', '.markdown-body', '[data-testid="preview"]']
+            for (var i = 0; i < previewSelectors.length; i++) {
+              var previewEl = document.querySelector(previewSelectors[i])
+              if (previewEl) {
+                // Try h1 first
+                var h1 = previewEl.querySelector('h1')
+                if (h1 && h1.textContent && h1.textContent.trim()) {
+                  console.log('Mdnice: Found title from HTML h1 in preview:', h1.textContent.trim())
+                  return h1.textContent.trim()
+                }
+                // Fallback to first heading
+                var firstHeading = previewEl.querySelector('h1, h2, h3')
+                if (firstHeading && firstHeading.textContent && firstHeading.textContent.trim()) {
+                  console.log('Mdnice: Found title from first heading in preview:', firstHeading.textContent.trim())
+                  return firstHeading.textContent.trim()
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('Mdnice: Error extracting title from preview', e)
+          }
+          
+          // Strategy 3: Try to get from page title or meta tags
+          try {
+            var metaTitle = null
+            var ogTitle = document.querySelector('meta[property="og:title"]')
+            if (ogTitle && ogTitle.content) {
+              metaTitle = ogTitle.content
+            } else {
+              var twitterTitle = document.querySelector('meta[name="twitter:title"]')
+              if (twitterTitle && twitterTitle.content) {
+                metaTitle = twitterTitle.content
+              } else {
+                metaTitle = document.title
+              }
+            }
+            
+            if (metaTitle && metaTitle.trim() && !metaTitle.toLowerCase().includes('mdnice')) {
+              console.log('Mdnice: Found title from meta/page title:', metaTitle.trim())
+              return metaTitle.trim()
+            }
+          } catch (e) {
+            console.warn('Mdnice: Error extracting title from meta', e)
+          }
+          
+          console.warn('Mdnice: Could not extract title from any source')
+          return null
+        }
+
         function resolveWith(markdown, html) {
+          // Extract title - try multiple times with small delays to catch dynamic content
+          var title = extractTitle()
+          
+          // If title not found and we have markdown, try extracting from markdown directly
+          if (!title && markdown) {
+            try {
+              var titleMatch = markdown.match(/^#\s+(.+)$/m) || 
+                               markdown.match(/^#+\s+(.+)$/m)
+              if (titleMatch && titleMatch[1]) {
+                title = titleMatch[1].trim()
+                console.log('Mdnice: Found title from markdown in resolveWith:', title)
+              }
+            } catch (e) {
+              console.warn('Mdnice: Error extracting title from markdown in resolveWith', e)
+            }
+          }
+          
+          console.log('Mdnice: Final extracted title:', title || '(not found)')
+          
           resolve({
             markdown: markdown || '',
             html: html || null,
             saveTime: Date.now(),
+            title: title || null,
           })
         }
 

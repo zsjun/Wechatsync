@@ -667,6 +667,77 @@ class Syner {
         return true
       }
 
+      // Handle request to ensure page.js is injected
+      if (request.action && request.action == 'ensurePageScript') {
+        ;(async () => {
+          try {
+            var tabId = null
+            // Try to get tab ID from request first (if passed from api.js)
+            if (request.tabId) {
+              tabId = request.tabId
+            } else if (sender.tab && sender.tab.id) {
+              tabId = sender.tab.id
+            } else {
+              // Fallback: try to get active tab
+              try {
+                var tabs = await chrome.tabs.query({ active: true, currentWindow: true })
+                if (tabs && tabs.length > 0) {
+                  tabId = tabs[0].id
+                }
+              } catch (e) {
+                console.warn('[WCS] ensurePageScript: Could not query tabs:', e)
+              }
+            }
+            
+            if (!tabId) {
+              console.error('[WCS] ensurePageScript: No tab ID available, sender:', sender, 'request:', request)
+              sendResponseA({ error: 'No tab ID available', sender: sender, request: request })
+              return
+            }
+            
+            console.log('[WCS] ensurePageScript: Injecting page.js into tab', tabId, 'URL:', request.url || 'unknown')
+            try {
+              await chrome.scripting.executeScript({
+                target: { tabId: tabId },
+                files: [
+                  'libs/juqery.js',
+                  'libs/Readability.js',
+                  'libs/reader.js',
+                  'page.js',
+                ],
+              })
+              console.log('[WCS] ensurePageScript: Successfully injected page.js')
+              sendResponseA({ success: true, injected: true, tabId: tabId })
+            } catch (injectError) {
+              console.error('[WCS] ensurePageScript: executeScript failed:', injectError)
+              console.error('[WCS] ensurePageScript: Error name:', injectError.name)
+              console.error('[WCS] ensurePageScript: Error message:', injectError.message)
+              if (injectError.stack) {
+                console.error('[WCS] ensurePageScript: Error stack:', injectError.stack)
+              }
+              sendResponseA({ 
+                error: injectError.message || String(injectError),
+                name: injectError.name,
+                stack: injectError.stack
+              })
+            }
+          } catch (e) {
+            console.error('[WCS] ensurePageScript: Outer catch - Failed:', e)
+            console.error('[WCS] ensurePageScript: Error name:', e.name)
+            console.error('[WCS] ensurePageScript: Error message:', e.message)
+            if (e.stack) {
+              console.error('[WCS] ensurePageScript: Error stack:', e.stack)
+            }
+            sendResponseA({ 
+              error: e.message || String(e),
+              name: e.name,
+              stack: e.stack
+            })
+          }
+        })()
+        return true
+      }
+
       if (request.action && request.action == 'callDriverMethod') {
         console.log(request)
         ;(async () => {

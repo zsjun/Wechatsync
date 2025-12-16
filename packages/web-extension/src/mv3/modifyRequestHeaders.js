@@ -12,8 +12,7 @@ function stableRuleId(input) {
 function updateDynamicRules(details) {
   return new Promise((resolve, reject) => {
     try {
-      chrome.declarativeNetRequest.updateDynamicRules(details, () => {
-        const err = chrome.runtime?.lastError
+      chrome.declarativeNetRequest.updateDynamicRules(details, (err) => {
         if (err) reject(err)
         else resolve()
       })
@@ -39,7 +38,13 @@ export async function modifyRequestHeaders(
   handler
 ) {
   // MV3: no blocking webRequest, use DNR modifyHeaders instead.
-  if (!chrome?.declarativeNetRequest?.updateDynamicRules) {
+  if (handler) {
+    console.warn(
+      '[mv3] modifyRequestHeaders(handler) is not supported; ignoring handler'
+    )
+  }
+
+  if (!chrome.declarativeNetRequest) {
     console.warn(
       '[mv3] declarativeNetRequest unavailable; skip modifyRequestHeaders',
       urlPrefix
@@ -47,40 +52,45 @@ export async function modifyRequestHeaders(
     return
   }
 
-  if (handler) {
-    console.warn(
-      '[mv3] modifyRequestHeaders(handler) is not supported; ignoring handler'
-    )
-  }
-  if (inspectUrls?.length) {
-    // We keep this for backward compatibility; SW cannot inspect/observe requests via DNR.
-    // URL observation should be done via fetch wrappers or other explicit APIs.
-  }
-
   const ruleId = stableRuleId(
     `hdr:${urlPrefix}:${Object.keys(headers).sort().join(',')}`
   )
-  const requestHeaders = Object.entries(headers).map(([header, value]) => ({
-    header,
-    operation: 'set',
-    value: String(value),
-  }))
 
-  const rule = {
-    id: ruleId,
-    priority: 1,
-    action: {
-      type: 'modifyHeaders',
-      requestHeaders,
-    },
-    condition: {
-      urlFilter: urlPrefix,
-      resourceTypes: ['xmlhttprequest', 'other'],
-    },
+  // URL observation should be done via fetch wrappers or other explicit APIs.
+  // Most of these calls are API requests; keep scope tight.
+  const resourceTypes = ['xmlhttprequest', 'other']
+
+  try {
+    console.log('[mv3] modifyRequestHeaders start', {
+      urlPrefix,
+    })
+
+    const requestHeaders = Object.entries(headers).map(([header, value]) => ({
+      header,
+      operation: 'set',
+      value,
+    }))
+
+    const rule = {
+      id: ruleId,
+      priority: 1,
+      action: {
+        type: 'modifyHeaders',
+        requestHeaders,
+      },
+      condition: {
+        urlFilter: urlPrefix,
+        resourceTypes,
+      },
+    }
+
+    const updateDetails = {
+      removeRuleIds: [ruleId],
+      addRules: [rule],
+    }
+    await updateDynamicRules(updateDetails)
+    console.log('[mv3] modifyRequestHeaders success', { ruleId })
+  } catch (e) {
+    console.warn('[mv3] modifyRequestHeaders failed', e)
   }
-
-  await updateDynamicRules({
-    removeRuleIds: [ruleId],
-    addRules: [rule],
-  })
 }

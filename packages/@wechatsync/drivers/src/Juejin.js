@@ -328,6 +328,16 @@ export default class JuejinAdapter {
       }
     }
 
+    // Ensure title is available - try multiple sources
+    var articleTitle = post.post_title || post.title || ''
+    
+    if (!articleTitle || articleTitle.trim().length === 0) {
+      console.warn('Juejin: No title found in post, using default')
+      articleTitle = 'Untitled Article'
+    }
+    
+    console.log('Juejin editPost: title =', articleTitle)
+
     const res = await fetch(
       'https://api.juejin.cn/content_api/v1/article_draft/create',
       {
@@ -345,7 +355,7 @@ export default class JuejinAdapter {
           link_url: '',
           mark_content: markdown,
           tag_ids: [],
-          title: post.post_title,
+          title: articleTitle,
         }),
       }
     )

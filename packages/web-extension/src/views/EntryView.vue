@@ -412,13 +412,67 @@ export default {
   },
   methods: {
     extractArticle() {
+      console.log('[WCS EntryView] extractArticle called')
       // Send message to active tab to fetch article
-      chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+      chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+        console.log('[WCS EntryView] Active tabs:', tabs)
         if (tabs && tabs.length > 0) {
-          chrome.tabs.sendMessage(tabs[0].id, {
-            method: 'fetchArticle',
-          })
-          window.close() // Close popup so user can see the effect on the page
+          var tab = tabs[0]
+          console.log('[WCS EntryView] Sending message to tab:', tab.id, tab.url)
+          
+          // Try sending message first
+          chrome.tabs.sendMessage(
+            tab.id,
+            {
+              method: 'fetchArticle',
+            },
+            async (response) => {
+              if (chrome.runtime.lastError) {
+                console.warn('[WCS EntryView] Message failed, attempting to inject page.js:', chrome.runtime.lastError.message)
+                
+                // If message fails, try injecting page.js programmatically
+                try {
+                  await chrome.scripting.executeScript({
+                    target: { tabId: tab.id },
+                    files: [
+                      'libs/juqery.js',
+                      'libs/Readability.js',
+                      'libs/reader.js',
+                      'page.js',
+                    ],
+                  })
+                  console.log('[WCS EntryView] page.js injected successfully, retrying message')
+                  
+                  // Retry sending message after injection
+                  chrome.tabs.sendMessage(
+                    tab.id,
+                    {
+                      method: 'fetchArticle',
+                    },
+                    (retryResponse) => {
+                      if (chrome.runtime.lastError) {
+                        console.error('[WCS EntryView] Retry also failed:', chrome.runtime.lastError.message)
+                        alert('无法发送消息到页面: ' + chrome.runtime.lastError.message + '\n请检查扩展对当前站点的访问权限（Site access），然后刷新页面重试。')
+                      } else {
+                        console.log('[WCS EntryView] Retry successful, response:', retryResponse)
+                      }
+                    }
+                  )
+                } catch (injectError) {
+                  console.error('[WCS EntryView] Failed to inject page.js:', injectError)
+                  alert('无法注入脚本到页面: ' + (injectError.message || String(injectError)) + '\n请检查扩展对当前站点的访问权限（Site access）。')
+                }
+              } else {
+                console.log('[WCS EntryView] Message sent successfully, response:', response)
+              }
+            }
+          )
+          // Don't close immediately, wait a bit to see if there's an error
+          setTimeout(function () {
+            window.close() // Close popup so user can see the effect on the page
+          }, 1000)
+        } else {
+          console.error('[WCS EntryView] No active tabs found')
         }
       })
     },

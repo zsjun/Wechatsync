@@ -15,6 +15,55 @@ setTimeout(function () {
   ;(document.head || document.documentElement).appendChild(script)
 }, 50)
 
+// Ensure page.js functionality is available even if content script fails to load
+// This is a fallback for cases where page.js doesn't inject properly
+// Only run in main frame (not in iframes)
+if (window.self === window.top) {
+  setTimeout(function () {
+    // Check if page.js has loaded by checking for its global functions
+    if (typeof window.initPageFetch === 'undefined') {
+      console.warn('[WCS] page.js not detected, attempting to inject programmatically')
+      // Get current tab ID first
+      chrome.runtime.sendMessage({ action: 'getCurrentTab' }, function(tabResponse) {
+        if (chrome.runtime.lastError) {
+          console.error('[WCS] Could not get current tab:', chrome.runtime.lastError.message)
+          return
+        }
+        // Try to inject page.js via scripting API (requires background script coordination)
+        chrome.runtime.sendMessage({
+          action: 'ensurePageScript',
+          url: window.location.href,
+          tabId: tabResponse && tabResponse.tabId ? tabResponse.tabId : null
+        }, function(response) {
+          if (chrome.runtime.lastError) {
+            console.error('[WCS] Could not request page.js injection:', chrome.runtime.lastError.message)
+            console.error('[WCS] Error details:', chrome.runtime.lastError)
+          } else if (response && response.error) {
+            console.error('[WCS] page.js injection failed:', response.error)
+            if (response.stack) {
+              console.error('[WCS] Error stack:', response.stack)
+            }
+          } else {
+            console.log('[WCS] page.js injection requested successfully:', response)
+            // Wait a bit and check if it loaded
+            setTimeout(function() {
+              if (typeof window.initPageFetch !== 'undefined') {
+                console.log('[WCS] page.js successfully loaded after injection')
+              } else {
+                console.warn('[WCS] page.js still not detected after injection attempt')
+              }
+            }, 2000)
+          }
+        })
+      })
+    } else {
+      console.log('[WCS] page.js already loaded')
+    }
+  }, 1000)
+} else {
+  console.log('[WCS] api.js running in iframe, skipping page.js injection check')
+}
+
 var allAccounts = []
 var accounts = []
 
