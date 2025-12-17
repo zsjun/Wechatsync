@@ -8,11 +8,27 @@ export default defineConfig({
   base: './',
   build: {
     outDir: '../dist',
-    emptyOutDir: true
+    emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        entryFileNames: 'main.js',
+        assetFileNames: (assetInfo) => {
+          if (assetInfo.name && assetInfo.name.endsWith('.css')) {
+            return 'styles.css'
+          }
+          return '[name][extname]'
+        },
+      },
+    },
   },
+  envDir: path.resolve(__dirname, '../../'),
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, 'src')
-    }
-  }
+      '@': path.resolve(__dirname, 'src'),
+      vue: 'vue/dist/vue.esm-bundler.js',
+    },
+  },
+  define: {
+    global: 'window',
+  },
 })

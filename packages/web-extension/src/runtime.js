@@ -42,7 +42,8 @@ $.ajax = async function(settings) {
   }
   
   if (method !== 'GET' && settings.data) {
-    if (settings.dataType === 'JSON' || settings.contentType === 'application/json') {
+    // jQuery semantics: dataType is response type, contentType controls request encoding.
+    if (settings.contentType === 'application/json') {
       fetchOptions.headers['Content-Type'] = 'application/json'
       fetchOptions.body = JSON.stringify(settings.data)
     } else {
@@ -52,6 +53,10 @@ $.ajax = async function(settings) {
         : new URLSearchParams(settings.data).toString()
     }
   }
+
+  if (settings.referrer) fetchOptions.referrer = settings.referrer
+  if (settings.referrerPolicy) fetchOptions.referrerPolicy = settings.referrerPolicy
+  if (settings.mode) fetchOptions.mode = settings.mode
   
   const res = await fetch(settings.url, fetchOptions)
   const text = await res.text()

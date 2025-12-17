@@ -96,10 +96,12 @@ $.ajax = async function (settings) {
   }
 
   if (method !== 'GET' && settings.data) {
-    if (
-      settings.dataType === 'JSON' ||
-      settings.contentType === 'application/json'
-    ) {
+    // jQuery semantics:
+    // - `dataType` describes expected RESPONSE type, not request content type.
+    // - `contentType` controls request body encoding.
+    // Our previous shim treated `dataType: 'JSON'` as "send JSON body", which breaks drivers
+    // (e.g. Toutiao) that set dataType but still expect form-urlencoded requests.
+    if (settings.contentType === 'application/json') {
       fetchOptions.headers['Content-Type'] = 'application/json'
       fetchOptions.body =
         typeof settings.data === 'string'
@@ -113,6 +115,12 @@ $.ajax = async function (settings) {
           : new URLSearchParams(settings.data).toString()
     }
   }
+
+  // Allow callers to pass through fetch options that are important for some sites (e.g. Toutiao).
+  // Note: `Referer` header is forbidden; use fetch `referrer` instead.
+  if (settings.referrer) fetchOptions.referrer = settings.referrer
+  if (settings.referrerPolicy) fetchOptions.referrerPolicy = settings.referrerPolicy
+  if (settings.mode) fetchOptions.mode = settings.mode
 
   const res = await fetch(settings.url, fetchOptions)
   const text = await res.text()
