@@ -72,13 +72,14 @@ export default class ZhiHuAdapter {
   }
 
   async addPost(post) {
+    var title = post.post_title || post.title || ''
     var res = await $.ajax({
       url: 'https://zhuanlan.zhihu.com/api/articles/drafts',
       type: 'POST',
       dataType: 'JSON',
       contentType: 'application/json',
       data: JSON.stringify({
-        title: post.post_title,
+        title: title,
         // content: post.post_content
       }),
     })
@@ -91,17 +92,29 @@ export default class ZhiHuAdapter {
   }
 
   async editPost(post_id, post) {
-    console.log('editPost', post.post_thumbnail)
+    var title = post.post_title || post.title || ''
+    var content = post.post_content || post.content || ''
+    console.log('Zhihu.editPost', post_id, {
+      hasTitle: !!title,
+      contentLength: content ? content.length : 0,
+      post_thumbnail: post.post_thumbnail,
+    })
+
+    var payload = {
+      title: title,
+      content: content,
+      isTitleImageFullScreen: false,
+    }
+    // Only set titleImage when we actually have an uploaded thumbnail id.
+    // Passing an invalid url like https://pic1.zhimg.com/undefined.png can cause Zhihu to ignore/sanitize the draft content.
+    if (post.post_thumbnail) {
+      payload.titleImage = 'https://pic1.zhimg.com/' + post.post_thumbnail + '.png'
+    }
     var res = await $.ajax({
       url: 'https://zhuanlan.zhihu.com/api/articles/' + post_id + '/draft',
       type: 'PATCH',
       contentType: 'application/json',
-      data: JSON.stringify({
-        title: post.post_title,
-        content: post.post_content,
-        isTitleImageFullScreen: false,
-        titleImage: 'https://pic1.zhimg.com/' + post.post_thumbnail + '.png',
-      }),
+      data: JSON.stringify(payload),
     })
 
     return {
@@ -161,6 +174,18 @@ export default class ZhiHuAdapter {
 
   async uploadFile(file) {
     console.log('ZhiHuDriver.uploadFile', file, md5)
+
+    // Prefer Zhihu's URL-based upload when we already have a remote image URL.
+    // This returns `res.src` which is a fully-qualified, directly usable CDN URL.
+    // It avoids guessing the correct pic*.zhimg.com URL pattern from an object_key.
+    try {
+      if (file && file.src && /^https?:\/\//.test(file.src)) {
+        return await this._uploadFile(file)
+      }
+    } catch (e) {
+      console.warn('ZhiHuDriver._uploadFile failed, fallback to binary upload:', e)
+    }
+
     var updateData = JSON.stringify({
       image_hash: md5(file.bits),
       source: 'article',
@@ -203,26 +228,41 @@ export default class ZhiHuAdapter {
       // add extension for gif
       upload_file.object_key = upload_file.object_key + '.gif';
     }
+
+    // Construct a usable URL for article HTML.
+    // Zhihu commonly uses `v2-xxxx_r.jpg` style keys. If we only have `v2-xxxx`,
+    // append a common suffix.
+    var objectKey = upload_file.object_key
+    var finalUrl = ''
+    if (objectKey) {
+      if (/^v2-/.test(objectKey) && objectKey.indexOf('.') === -1) {
+        finalUrl = 'https://pic4.zhimg.com/' + objectKey + '_r.jpg'
+      } else if (objectKey.indexOf('.') === -1) {
+        finalUrl = 'https://pic4.zhimg.com/' + objectKey + '.png'
+      } else {
+        finalUrl = 'https://pic4.zhimg.com/' + objectKey
+      }
+    }
     return [
       {
         id: upload_file.object_key,
         object_key: upload_file.object_key,
-        url: 'https://pic4.zhimg.com/' + upload_file.object_key,
+        url: finalUrl || 'https://pic4.zhimg.com/' + upload_file.object_key,
         // url: 'https://pic1.zhimg.com/80/' + upload_file.object_key + '_hd.png',
       },
     ]
   }
 
   async preEditPost(post) {
-    var div = $('<div>')
-    $('body').append(div)
-
-    // post.content = post.content.replace(/\>\s+\</g,'');
-    div.html(post.content)
-
-    // var org = $(post.content);
-    // var doc = $('<div>').append(org.clone());
-    var doc = div
+    // MV3 Service Worker has no DOM; `$` is a cheerio-based shim.
+    // Avoid using $('body') / append() which breaks in SW.
+    try {
+      var wrapperHtml = '<div>' + (post.content || '') + '</div>'
+      var doc = $(wrapperHtml)
+      if (!doc || typeof doc.find !== 'function') {
+        console.warn('Zhihu.preEditPost: invalid wrapper, skip')
+        return
+      }
     // var pres = doc.find('pre')
     // console.log('find code blocks', pres.length, post)
     // for (let mindex = 0; mindex < pres.length; mindex++) {
@@ -235,8 +275,8 @@ export default class ZhiHuAdapter {
     //     }
     //   } catch (e) {}
     // }
-    tools.doPreFilter(div)
-    tools.processDocCode(div)
+      if (tools && tools.doPreFilter) tools.doPreFilter(doc)
+      if (tools && tools.processDocCode) tools.processDocCode(doc)
 
     var removeIfEmpty = function() {
       var $obj = $(this)
@@ -367,11 +407,11 @@ export default class ZhiHuAdapter {
     // }
 
     // console.log('found table', doc.find('table'))
-    var tempDoc = $('<div>').append(doc.clone())
-    post.content =
-      tempDoc.children('div').length == 1
-        ? tempDoc.children('div').html()
-        : tempDoc.html()
+      // Write back processed HTML (unwrap outer wrapper if possible)
+      post.content = doc.html() || post.content
+    } catch (e) {
+      console.warn('Zhihu.preEditPost error', e)
+    }
     // div.remove();
     // this.addNotify(post)
   }
