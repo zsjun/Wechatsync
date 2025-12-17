@@ -155,7 +155,10 @@
                     class="icon"
                     height="20"
                   />
-                  {{ account.title }}
+                  <span style="color: #999; margin-right: 5px">{{
+                    getAccountPrefix(account)
+                  }}</span
+                  >{{ account.title }}
                 </a>
                 <!-- <img src="/images/arrow-right-light.png" style="float: right;"> -->
               </li>
@@ -163,58 +166,53 @@
             </ul>
           </div>
           <div class="tool-bottom">
-            <button
-              class="btn btn-outline-info"
-              type="button"
-              style="margin-right: 10px"
-              @click="writeArticle()"
-            >
-              交流群
-            </button>
+            <div style="margin-bottom: 10px">
+              <button
+                class="btn btn-outline-info"
+                type="button"
+                style="margin-right: 10px"
+                @click="writeArticle()"
+              >
+                交流群
+              </button>
 
-            <button
-              class="btn btn-outline-secondary"
-              type="button"
-              style="margin-right: 10px"
-              @click="faq()"
-            >
-              问题反馈
-            </button>
+              <button
+                class="btn btn-outline-secondary"
+                type="button"
+                style="margin-right: 10px"
+                @click="faq()"
+              >
+                问题反馈
+              </button>
 
-            <button
-              class="btn btn-outline-secondary"
-              type="button"
-              style="margin-right: 10px"
-              @click="howtouse()"
-            >
-              如何使用
-            </button>
+              <button
+                class="btn btn-outline-secondary"
+                type="button"
+                style="margin-right: 10px"
+                @click="howtouse()"
+              >
+                如何使用
+              </button>
+            </div>
 
-            <!-- <button
-            class="btn btn-outline-secondary"
-            type="button"
-            style="margin-right: 10px"
-            @click="goDonate()"
-          >
-            捐赠
-          </button> -->
+            <div>
+              <button
+                class="btn btn-outline-secondary"
+                type="button"
+                style="margin-right: 10px"
+                @click="extractArticle()"
+              >
+                提取文章
+              </button>
 
-            <button
-              class="btn btn-primary float-right"
-              type="button"
-              style="margin-right: 10px"
-              @click="extractArticle()"
-            >
-              提取文章
-            </button>
-
-            <button
-              class="btn btn-outline-secondary float-right"
-              type="button"
-              @click="$router.push({ name: 'AddAccount' })"
-            >
-              添加账号
-            </button>
+              <button
+                class="btn btn-outline-secondary float-right"
+                type="button"
+                @click="$router.push({ name: 'AddAccount' })"
+              >
+                添加账号
+              </button>
+            </div>
           </div>
         </section>
         <section v-if="currentTab == 'tool'">
@@ -648,6 +646,25 @@ export default {
         this.loading = false
         console.log(resp)
       })
+    },
+    getAccountPrefix(account) {
+      if (account.displayName) return account.displayName
+      const typeMap = {
+        wechat: '微信公众号',
+        zhihu: '知乎',
+        juejin: '掘金',
+        wordpress: 'WordPress',
+        typecho: 'Typecho',
+        'jian-shu': '简书',
+        csdn: 'CSDN',
+        segmentfault: 'SegmentFault',
+        oschina: '开源中国',
+        cnblogs: '博客园',
+        toutiao: '今日头条',
+        163: '网易号',
+        douban: '豆瓣',
+      }
+      return typeMap[account.type] || account.type
     },
   },
 }
