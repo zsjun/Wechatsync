@@ -848,55 +848,98 @@ function fetchMdniceArticle() {
         function extractTitle() {
           console.log('Mdnice: Starting title extraction...')
           
-          // Strategy 1: Try to find title input field in mdnice editor (multiple selectors)
+          // Strategy 1: Extract from sidebar container (most reliable for mdnice)
+          // The title is in: .nice-article-sidebar-list-item-container[style] > p
           try {
-            var titleSelectors = [
-              'input[placeholder*="标题"]',
-              'input[name="title"]',
-              'input[id*="title"]',
-              '.title-input input',
-              '#title-input',
-              'input[type="text"][placeholder*="title" i]',
-              '.editor-title input',
-              '[data-testid="title-input"]',
-              'input.editor-title'
-            ]
+            var sidebarContainers = document.querySelectorAll('.nice-article-sidebar-list-item-container')
+            console.log('Mdnice: Found sidebar containers:', sidebarContainers.length)
             
-            for (var s = 0; s < titleSelectors.length; s++) {
-              try {
-                var titleInput = document.querySelector(titleSelectors[s])
-                if (titleInput) {
-                  var titleValue = titleInput.value || titleInput.getAttribute('value') || ''
-                  if (titleValue && titleValue.trim()) {
-                    console.log('Mdnice: Found title from input field (' + titleSelectors[s] + '):', titleValue.trim())
-                    return titleValue.trim()
-                  }
+            for (var i = 0; i < sidebarContainers.length; i++) {
+              var container = sidebarContainers[i]
+              var styleAttr = container.getAttribute('style')
+              
+              // Check if container has style attribute (not null)
+              if (styleAttr !== null) {
+                var pTag = container.querySelector('p')
+                if (pTag && pTag.textContent && pTag.textContent.trim()) {
+                  var titleText = pTag.textContent.trim()
+                  console.log('Mdnice: Found title from sidebar container:', titleText)
+                  return titleText
                 }
-              } catch (e) {
-                // Continue to next selector
+              }
+            }
+          } catch (e) {
+            console.warn('Mdnice: Error extracting title from sidebar container', e)
+          }
+          
+          // Strategy 2: Try common mdnice title input selectors (fallback)
+          try {
+            // Most common: mdnice usually has a title input at the top
+            var titleInput = document.querySelector('input[placeholder*="标题"]') ||
+                            document.querySelector('input[placeholder*="title" i]') ||
+                            document.querySelector('input[name="title"]') ||
+                            document.querySelector('input[id*="title" i]') ||
+                            document.querySelector('.title input') ||
+                            document.querySelector('#title') ||
+                            document.querySelector('input.title') ||
+                            document.querySelector('[class*="title"] input[type="text"]') ||
+                            // Try any input that looks like a title field (has "title" in class/id/name)
+                            Array.from(document.querySelectorAll('input[type="text"]')).find(function(input) {
+                              var id = (input.id || '').toLowerCase()
+                              var name = (input.name || '').toLowerCase()
+                              var className = (input.className || '').toLowerCase()
+                              var placeholder = (input.placeholder || '').toLowerCase()
+                              return (id.includes('title') || name.includes('title') || 
+                                      className.includes('title') || placeholder.includes('title') ||
+                                      placeholder.includes('标题'))
+                            })
+            
+            if (titleInput) {
+              var titleValue = titleInput.value || titleInput.getAttribute('value') || titleInput.textContent || ''
+              if (titleValue && titleValue.trim()) {
+                console.log('Mdnice: Found title from input field:', titleValue.trim())
+                return titleValue.trim()
               }
             }
           } catch (e) {
             console.warn('Mdnice: Error extracting title from input fields', e)
           }
           
-          // Strategy 2: Try to extract from HTML preview (h1 tag in preview container)
+          // Strategy 3: Try to extract from HTML preview (h1 tag in preview container)
           try {
+            // Try to find h1 anywhere in the document first (simpler)
+            var h1 = document.querySelector('h1')
+            if (h1 && h1.textContent && h1.textContent.trim()) {
+              var h1Text = h1.textContent.trim()
+              // Skip if it's just "Mdnice" or similar
+              if (h1Text.toLowerCase() !== 'mdnice' && !h1Text.toLowerCase().includes('mdnice 文章')) {
+                console.log('Mdnice: Found title from h1:', h1Text)
+                return h1Text
+              }
+            }
+            
+            // Then try preview containers
             var previewSelectors = ['#nice', '#preview', '.preview', '.preview-body', '.output', '.markdown-body', '[data-testid="preview"]']
             for (var i = 0; i < previewSelectors.length; i++) {
               var previewEl = document.querySelector(previewSelectors[i])
               if (previewEl) {
                 // Try h1 first
-                var h1 = previewEl.querySelector('h1')
-                if (h1 && h1.textContent && h1.textContent.trim()) {
-                  console.log('Mdnice: Found title from HTML h1 in preview:', h1.textContent.trim())
-                  return h1.textContent.trim()
+                var previewH1 = previewEl.querySelector('h1')
+                if (previewH1 && previewH1.textContent && previewH1.textContent.trim()) {
+                  var previewH1Text = previewH1.textContent.trim()
+                  if (previewH1Text.toLowerCase() !== 'mdnice' && !previewH1Text.toLowerCase().includes('mdnice 文章')) {
+                    console.log('Mdnice: Found title from HTML h1 in preview:', previewH1Text)
+                    return previewH1Text
+                  }
                 }
                 // Fallback to first heading
                 var firstHeading = previewEl.querySelector('h1, h2, h3')
                 if (firstHeading && firstHeading.textContent && firstHeading.textContent.trim()) {
-                  console.log('Mdnice: Found title from first heading in preview:', firstHeading.textContent.trim())
-                  return firstHeading.textContent.trim()
+                  var headingText = firstHeading.textContent.trim()
+                  if (headingText.toLowerCase() !== 'mdnice' && !headingText.toLowerCase().includes('mdnice 文章')) {
+                    console.log('Mdnice: Found title from first heading in preview:', headingText)
+                    return headingText
+                  }
                 }
               }
             }
@@ -904,7 +947,7 @@ function fetchMdniceArticle() {
             console.warn('Mdnice: Error extracting title from preview', e)
           }
           
-          // Strategy 3: Try to get from page title or meta tags
+          // Strategy 4: Try to get from page title or meta tags
           try {
             var metaTitle = null
             var ogTitle = document.querySelector('meta[property="og:title"]')
@@ -935,14 +978,32 @@ function fetchMdniceArticle() {
           // Extract title - try multiple times with small delays to catch dynamic content
           var title = extractTitle()
           
-          // If title not found and we have markdown, try extracting from markdown directly
+          // If title not found and we have markdown, try extracting from markdown directly (FIRST LINE)
           if (!title && markdown) {
             try {
-              var titleMatch = markdown.match(/^#\s+(.+)$/m) || 
-                               markdown.match(/^#+\s+(.+)$/m)
-              if (titleMatch && titleMatch[1]) {
-                title = titleMatch[1].trim()
-                console.log('Mdnice: Found title from markdown in resolveWith:', title)
+              // Get first non-empty line that starts with #
+              var lines = markdown.split('\n')
+              for (var i = 0; i < Math.min(lines.length, 10); i++) { // Check first 10 lines
+                var line = lines[i].trim()
+                if (line && line.startsWith('#')) {
+                  // Remove # and whitespace
+                  var extractedTitle = line.replace(/^#+\s*/, '').trim()
+                  if (extractedTitle && extractedTitle.length > 0) {
+                    title = extractedTitle
+                    console.log('Mdnice: Found title from markdown first line:', title)
+                    break
+                  }
+                }
+              }
+              
+              // Fallback to regex if line-by-line didn't work
+              if (!title) {
+                var titleMatch = markdown.match(/^#\s+(.+)$/m) || 
+                                 markdown.match(/^#+\s+(.+)$/m)
+                if (titleMatch && titleMatch[1]) {
+                  title = titleMatch[1].trim()
+                  console.log('Mdnice: Found title from markdown regex:', title)
+                }
               }
             } catch (e) {
               console.warn('Mdnice: Error extracting title from markdown in resolveWith', e)
