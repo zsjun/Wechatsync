@@ -75,6 +75,15 @@
         "http://mp.toutiao.com/*"
       ],
       "run_at": "document_end"
+    },
+    {
+      "js": ["csdn-upload.js"],
+      "matches": [
+        "https://editor.csdn.net/*",
+        "https://mp.csdn.net/*",
+        "https://blog.csdn.net/*"
+      ],
+      "run_at": "document_end"
     }
   ],
   "web_accessible_resources": [

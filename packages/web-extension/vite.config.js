@@ -81,6 +81,7 @@ export default defineConfig({
         segmenftfault: path.resolve(__dirname, 'src/segmenftfault.js'),
         autoformat: path.resolve(__dirname, 'src/autoformat.js'),
         api: path.resolve(__dirname, 'src/api.js'),
+        'csdn-upload': path.resolve(__dirname, 'src/csdn-upload.js'),
         offscreen: path.resolve(__dirname, 'src/offscreen.html'),
       },
       output: {

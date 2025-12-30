@@ -4,13 +4,13 @@ import moment from 'moment'
 import axios from 'axios'
 
 // Shim jQuery for drivers
-const $ = function(selector) {
+const $ = function (selector) {
   // Minimal DOM support if needed, or just return empty for safety
   // console.warn('jQuery($) called with', selector)
   return []
 }
 // 使用原生 fetch 替代 axios，确保在 Service Worker 里能正确带上 Cookie
-$.get = async function(url) {
+$.get = async function (url) {
   const res = await fetch(url, { credentials: 'include' })
   const text = await res.text()
   try {
@@ -19,12 +19,13 @@ $.get = async function(url) {
     return text
   }
 }
-$.post = async function(url, data) {
+$.post = async function (url, data) {
   const res = await fetch(url, {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: typeof data === 'string' ? data : new URLSearchParams(data).toString()
+    body:
+      typeof data === 'string' ? data : new URLSearchParams(data).toString(),
   })
   const text = await res.text()
   try {
@@ -33,14 +34,14 @@ $.post = async function(url, data) {
     return text
   }
 }
-$.ajax = async function(settings) {
+$.ajax = async function (settings) {
   const method = (settings.type || settings.method || 'GET').toUpperCase()
   const fetchOptions = {
     method,
-    credentials: 'include',  // 带上 Cookie
-    headers: settings.headers || {}
+    credentials: 'include', // 带上 Cookie
+    headers: settings.headers || {},
   }
-  
+
   if (method !== 'GET' && settings.data) {
     // jQuery semantics: dataType is response type, contentType controls request encoding.
     if (settings.contentType === 'application/json') {
@@ -48,16 +49,18 @@ $.ajax = async function(settings) {
       fetchOptions.body = JSON.stringify(settings.data)
     } else {
       fetchOptions.headers['Content-Type'] = 'application/x-www-form-urlencoded'
-      fetchOptions.body = typeof settings.data === 'string' 
-        ? settings.data 
-        : new URLSearchParams(settings.data).toString()
+      fetchOptions.body =
+        typeof settings.data === 'string'
+          ? settings.data
+          : new URLSearchParams(settings.data).toString()
     }
   }
 
   if (settings.referrer) fetchOptions.referrer = settings.referrer
-  if (settings.referrerPolicy) fetchOptions.referrerPolicy = settings.referrerPolicy
+  if (settings.referrerPolicy)
+    fetchOptions.referrerPolicy = settings.referrerPolicy
   if (settings.mode) fetchOptions.mode = settings.mode
-  
+
   const res = await fetch(settings.url, fetchOptions)
   const text = await res.text()
   try {
@@ -70,12 +73,12 @@ $.ajax = async function(settings) {
 export function getSettings() {
   return new Promise((resolve, reject) => {
     try {
-      getCache('settings', value => {
+      getCache('settings', (value) => {
         if (value.settings) {
           try {
             var settings = JSON.parse(value.settings)
             resolve(settings)
-          } catch(e) {
+          } catch (e) {
             reject(e)
           }
         } else {
@@ -98,7 +101,22 @@ function getRuntimeScopes() {
   // MV3 Service Worker 没有 DOM；用 typeof 防止 ReferenceError
   const SafeDOMParser = typeof DOMParser !== 'undefined' ? DOMParser : undefined
   const SafeDocument = typeof document !== 'undefined' ? document : undefined
-  const SafeCryptoJS = typeof CryptoJS !== 'undefined' ? CryptoJS : globalThis.CryptoJS
+  const SafeCryptoJS =
+    typeof CryptoJS !== 'undefined' ? CryptoJS : globalThis.CryptoJS
+  
+  // Wrap chrome object to ensure it's importable into Sval
+  let SafeChrome = undefined
+  if (typeof chrome !== 'undefined') {
+    SafeChrome = {
+      tabs: chrome.tabs,
+      runtime: chrome.runtime,
+      storage: chrome.storage,
+      declarativeNetRequest: chrome.declarativeNetRequest,
+      webRequest: chrome.webRequest,
+      scripting: chrome.scripting,
+      offscreen: chrome.offscreen
+    }
+  }
 
   return {
     ...svalScopes,
@@ -117,6 +135,7 @@ function getRuntimeScopes() {
     requestFrameMethod: requestFrameMethod,
     modifyRequestHeaders: modifyRequestHeaders,
     CryptoJS: SafeCryptoJS,
+    chrome: SafeChrome,
     helpers: {
       parseTokenAndToHeaders: parseTokenAndToHeaders,
     },
@@ -126,7 +145,7 @@ function getRuntimeScopes() {
 export function initDevRuntimeEnvironment() {
   const scopes = getRuntimeScopes()
 
-  Object.keys(scopes).forEach(key => {
+  Object.keys(scopes).forEach((key) => {
     const g = typeof globalThis !== 'undefined' ? globalThis : window
     if (g && !Object.prototype.hasOwnProperty.call(g, key)) {
       g[key] = scopes[key]
@@ -171,7 +190,7 @@ export function initializeDriver(conf = {}) {
       const driver = getDriverProvider(code)
       resolve(driver)
     }
-    chrome.storage.local.get(['driver'], function(result) {
+    chrome.storage.local.get(['driver'], function (result) {
       try {
         if (conf.beforeCreate) {
           conf.beforeCreate(result)
@@ -187,13 +206,13 @@ export function initializeDriver(conf = {}) {
 function setCache(name, value) {
   var d = {}
   d[name] = value
-  chrome.storage.local.set(d, function() {
+  chrome.storage.local.set(d, function () {
     console.log('cache set')
   })
 }
 
 function getCache(name, cb) {
-  chrome.storage.local.get(name, function(result) {
+  chrome.storage.local.get(name, function (result) {
     cb(result)
   })
 }
@@ -217,7 +236,7 @@ function requestFrameMethod(d, name) {
   return new Promise((resolve, reject) => {
     var evtId = Date.now() + Math.random()
     d.eventId = evtId
-    abb[evtId] = function(err, data) {
+    abb[evtId] = function (err, data) {
       if (err) {
         reject(err)
       } else {
@@ -259,20 +278,20 @@ function modifyRequestHeaders(ulrPrefix, headers, inspectUrls, handler) {
   }
   console.log('modifyRequestHeaders', ulrPrefix)
   chrome.webRequest.onBeforeSendHeaders.addListener(
-    function(details) {
+    function (details) {
       try {
         var macthedUrl = details.url.indexOf(ulrPrefix) > -1
         if (macthedUrl) {
-          details.requestHeaders = details.requestHeaders.map(_ => {
+          details.requestHeaders = details.requestHeaders.map((_) => {
             if (headers[_.name]) {
               _.value = headers[_.name]
             }
             return _
           })
 
-          Object.keys(headers).forEach(name => {
+          Object.keys(headers).forEach((name) => {
             var existsHeaders = details.requestHeaders.filter(
-              _ => _.name == name
+              (_) => _.name == name
             )
             if (existsHeaders.length) {
             } else {
@@ -317,7 +336,7 @@ function getCookie(name, cookieStr) {
  * @param {string} headerKey - 插入Header中的名称.
  */
 function parseTokenAndToHeaders(details, cookieKey, headerKey) {
-  var cookieHeader = details.requestHeaders.filter(h => {
+  var cookieHeader = details.requestHeaders.filter((h) => {
     return h.name.toLowerCase() == 'cookie'
   })
   if (cookieHeader.length) {

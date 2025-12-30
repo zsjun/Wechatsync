@@ -38,6 +38,11 @@ if (typeof window === 'undefined') {
   self.window = self
 }
 
+// Ensure chrome is available globally for runtime scopes
+if (typeof globalThis !== 'undefined' && typeof chrome !== 'undefined') {
+  globalThis.chrome = chrome
+}
+
 // ========== 全局变量注入（driver 代码需要） ==========
 
 // axios 全局变量

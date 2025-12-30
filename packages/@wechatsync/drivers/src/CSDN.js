@@ -19,13 +19,17 @@ function arrayBufferToBase64(buffer) {
 }
 
 // Async sign function using Web Crypto API (works in Service Workers)
-async function signCSDN(apiPath, contentType = 'application/json') {
+async function signCSDN(
+  apiPath,
+  contentType = 'application/json',
+  method = 'POST'
+) {
   var once = createUuid()
   var accept = 'application/json, text/plain, */*'
 
   // Build signature string with explicit newlines
   var signStr = [
-    'POST',
+    method.toUpperCase(),
     accept,
     '', // Content-MD5
     contentType,
@@ -55,14 +59,18 @@ async function signCSDN(apiPath, contentType = 'application/json') {
 
   console.log('[CSDN] signature:', hashInBase64)
 
-  return {
+  var headers = {
     Accept: accept,
-    'Content-Type': contentType,
     'x-ca-key': '203803574',
     'x-ca-nonce': once,
     'x-ca-signature': hashInBase64,
     'x-ca-signature-headers': 'x-ca-key,x-ca-nonce',
   }
+  if (contentType) {
+    headers['Content-Type'] = contentType
+  }
+
+  return headers
 }
 
 function validateFileExt(ext) {
@@ -80,6 +88,7 @@ function validateFileExt(ext) {
 export default class CSDNAdapter {
   constructor() {
     this.name = 'csdn'
+    console.log('[CSDN] Adapter initialized')
     modifyRequestHeaders(
       'bizapi.csdn.net/',
       {
@@ -91,8 +100,8 @@ export default class CSDNAdapter {
     modifyRequestHeaders(
       'imgservice.csdn.net/',
       {
-        Origin: 'https://editor.csdn.net',
-        Referer: 'https://editor.csdn.net/',
+        Origin: 'https://mp.csdn.net',
+        Referer: 'https://mp.csdn.net/',
       },
       ['*://imgservice.csdn.net/*']
     )
@@ -186,100 +195,409 @@ export default class CSDNAdapter {
   }
 
   async requestUpload(filename) {
-    const api =
-      'https://imgservice.csdn.net/direct/v1.0/image/upload?watermark=&type=blog&rtype=markdown'
-    // Fix: Use parameter filename instead of undefined file
-    const fileExt = filename.split('.').pop()
+    const fileExt = (filename.split('.').pop() || 'png').toLowerCase()
     if (!validateFileExt(fileExt)) {
       throw new Error(`Unsupported file type: ${fileExt}`)
     }
 
-    // Fix: Use $.ajax instead of axios, which automatically includes cookies
-    var res = await $.ajax({
-      url: api,
-      type: 'GET',
-      dataType: 'json',
-      headers: {
-        'x-image-app': 'direct_blog',
-        'x-image-suffix': fileExt,
-        'x-image-dir': 'direct',
-      },
-    })
-
-    console.log('[CSDN] requestUpload response:', JSON.stringify(res))
-
-    if (!res || typeof res === 'string') {
-      throw new Error(
-        `Failed to get upload credentials: ${res || 'Empty response'}`
+    // Strategy 1: Try imgservice WITHOUT x-ca-signature (just cookies + x-image headers)
+    try {
+      const url =
+        'https://imgservice.csdn.net/direct/v1.0/image/upload?type=blog&rtype=markdown&watermark='
+      console.log(
+        '[CSDN] requestUpload Strategy 1: imgservice without signature'
       )
+
+      const response = await fetch(url, {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          Accept: 'application/json, text/plain, */*',
+          'x-image-app': 'direct_blog',
+          'x-image-suffix': fileExt,
+          'x-image-dir': 'direct',
+        },
+      })
+
+      const text = await response.text()
+      console.log('[CSDN] Strategy 1 raw response:', text)
+
+      const res = JSON.parse(text)
+      if (res && res.data && res.data.host) {
+        console.log('[CSDN] Strategy 1 success: got upload credentials')
+        return res.data
+      }
+
+      console.warn(
+        '[CSDN] Strategy 1 failed. code:',
+        res.code,
+        'msg:',
+        res.msg || res.message
+      )
+    } catch (e) {
+      console.warn('[CSDN] Strategy 1 exception:', e.message)
     }
 
-    // Handle both code: 200 and code: 0 as success (different APIs use different conventions)
-    if (res.code !== 200 && res.code !== 0) {
-      throw new Error(
-        `Failed to get upload credentials: ${
-          res.msg || res.message || 'Unknown error'
-        } (code: ${res.code})`
+    // Strategy 2: Try with x-ca signature
+    try {
+      const apiPath =
+        '/direct/v1.0/image/upload?rtype=markdown&type=blog&watermark='
+      const url = 'https://imgservice.csdn.net' + apiPath
+      const signHeaders = await signCSDN(apiPath, '', 'GET')
+
+      console.log('[CSDN] requestUpload Strategy 2: imgservice with signature')
+
+      const response = await fetch(url, {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          ...signHeaders,
+          'x-image-app': 'direct_blog',
+          'x-image-suffix': fileExt,
+          'x-image-dir': 'direct',
+        },
+      })
+
+      const text = await response.text()
+      console.log('[CSDN] Strategy 2 raw response:', text)
+
+      const res = JSON.parse(text)
+      if (res && res.data && res.data.host) {
+        console.log('[CSDN] Strategy 2 success: got upload credentials')
+        return res.data
+      }
+
+      console.warn(
+        '[CSDN] Strategy 2 failed. code:',
+        res.code,
+        'msg:',
+        res.msg || res.message
       )
+    } catch (e) {
+      console.warn('[CSDN] Strategy 2 exception:', e.message)
     }
 
-    // Return data if present, otherwise return the response itself
-    return res.data || res
+    // All strategies failed - return null to trigger fallback
+    console.error('[CSDN] All upload credential strategies failed')
+    return null
+  }
+
+  // Helper: Find a CSDN tab and send message to content script
+  async _uploadViaContentScript(file) {
+    try {
+      console.log('[CSDN] _uploadViaContentScript: starting v2')
+
+      // Use globalThis.chrome directly to avoid Sval issues with 'chrome' as a free variable
+      const _chrome =
+        (typeof globalThis !== 'undefined' && globalThis.chrome) ||
+        (typeof chrome !== 'undefined' ? chrome : null)
+
+      if (
+        !_chrome ||
+        !_chrome.tabs ||
+        typeof _chrome.tabs.query !== 'function'
+      ) {
+        console.log(
+          '[CSDN] chrome.tabs not found. Available globals:',
+          Object.keys(globalThis).filter((k) => !k.startsWith('__'))
+        )
+        return null
+      }
+
+      const csdnTabPatterns = [
+        '*://editor.csdn.net/*',
+        '*://mp.csdn.net/*',
+        '*://blog.csdn.net/*',
+        '*://*.csdn.net/*',
+      ]
+      const uploadEntryUrl = 'https://mp.csdn.net/mp_blog/creation/editor'
+
+      const queryTabs = async () =>
+        new Promise((resolve, reject) => {
+          try {
+            _chrome.tabs.query({ url: csdnTabPatterns }, (tabs) => {
+              const err = _chrome.runtime && _chrome.runtime.lastError
+              if (err) {
+                reject(err)
+              } else {
+                resolve(tabs || [])
+              }
+            })
+          } catch (e) {
+            reject(e)
+          }
+        })
+
+      const createTab = async () =>
+        new Promise((resolve, reject) => {
+          try {
+            _chrome.tabs.create(
+              {
+                url: uploadEntryUrl,
+                active: false,
+              },
+              (tab) => {
+                const err = _chrome.runtime && _chrome.runtime.lastError
+                if (err) {
+                  reject(err)
+                } else {
+                  resolve(tab)
+                }
+              }
+            )
+          } catch (e) {
+            reject(e)
+          }
+        })
+
+      const waitForTabReady = async (tabId, timeoutMs) =>
+        new Promise((resolve) => {
+          let done = false
+          const cleanup = (result) => {
+            if (done) return
+            done = true
+            if (_chrome.tabs && _chrome.tabs.onUpdated && listener) {
+              _chrome.tabs.onUpdated.removeListener(listener)
+            }
+            clearTimeout(timer)
+            resolve(result)
+          }
+          const listener = (updatedTabId, info) => {
+            if (updatedTabId === tabId && info && info.status === 'complete') {
+              cleanup(true)
+            }
+          }
+          const timer = setTimeout(() => cleanup(false), timeoutMs)
+          if (_chrome.tabs && _chrome.tabs.onUpdated) {
+            _chrome.tabs.onUpdated.addListener(listener)
+          } else {
+            cleanup(false)
+          }
+        })
+
+      const sendTabMessage = async (tabId, message) =>
+        new Promise((resolve, reject) => {
+          try {
+            _chrome.tabs.sendMessage(tabId, message, (response) => {
+              const err = _chrome.runtime && _chrome.runtime.lastError
+              if (err) {
+                reject(err)
+              } else {
+                resolve(response)
+              }
+            })
+          } catch (e) {
+            reject(e)
+          }
+        })
+
+      const ensureContentScript = async (tabId) => {
+        try {
+          const ping = await sendTabMessage(tabId, { action: 'csdn_ping' })
+          if (ping && ping.ready) {
+            return true
+          }
+        } catch (e) {
+          // No listener yet, fall through to injection
+        }
+
+        if (_chrome.scripting && _chrome.scripting.executeScript) {
+          try {
+            await new Promise((resolve, reject) => {
+              _chrome.scripting.executeScript(
+                {
+                  target: { tabId: tabId },
+                  files: ['csdn-upload.js'],
+                },
+                () => {
+                  const err = _chrome.runtime && _chrome.runtime.lastError
+                  if (err) {
+                    reject(err)
+                  } else {
+                    resolve(true)
+                  }
+                }
+              )
+            })
+          } catch (e) {
+            console.warn(
+              '[CSDN] executeScript failed for csdn-upload.js:',
+              e.message || e
+            )
+          }
+        }
+
+        try {
+          const ping = await sendTabMessage(tabId, { action: 'csdn_ping' })
+          return !!(ping && ping.ready)
+        } catch (e) {
+          return false
+        }
+      }
+
+      console.log('[CSDN] Querying for CSDN tabs...')
+      let tabs = await queryTabs()
+
+      if (!tabs || tabs.length === 0) {
+        console.log(
+          '[CSDN] No CSDN tab found, opening:',
+          uploadEntryUrl
+        )
+        const createdTab = await createTab()
+        if (!createdTab || !createdTab.id) {
+          console.warn('[CSDN] Failed to create CSDN tab')
+          return null
+        }
+        if (createdTab.status !== 'complete') {
+          await waitForTabReady(createdTab.id, 15000)
+        }
+        tabs = [createdTab]
+      }
+
+      for (const tab of tabs) {
+        try {
+          console.log('[CSDN] Pinging tab:', tab.id, tab.url)
+          const ready = await ensureContentScript(tab.id)
+          if (ready) {
+            console.log('[CSDN] Content script ready on tab:', tab.id)
+
+            let bitsBase64 = ''
+            if (file.bits) {
+              if (typeof file.bits === 'string') {
+                bitsBase64 = file.bits
+              } else {
+                const bytes = new Uint8Array(file.bits)
+                let binary = ''
+                for (let i = 0; i < bytes.length; i++) {
+                  binary += String.fromCharCode(bytes[i])
+                }
+                bitsBase64 = btoa(binary)
+              }
+            }
+
+            const response = await sendTabMessage(tab.id, {
+              action: 'csdn_upload_image',
+              file: {
+                name: file.name || 'image.png',
+                type: file.type || 'image/png',
+                bits: bitsBase64,
+                src: file.src,
+              },
+            })
+
+            if (
+              response &&
+              response.success &&
+              response.data &&
+              response.data.url
+            ) {
+              console.log(
+                '[CSDN] Content script upload success:',
+                response.data.url
+              )
+              return [{ url: response.data.url }]
+            }
+            console.warn(
+              '[CSDN] Content script upload fail on tab:',
+              tab.id,
+              response ? response.error : 'timeout'
+            )
+          }
+        } catch (e) {
+          console.log('[CSDN] Tab', tab.id, 'not responding:', e.message)
+        }
+      }
+      return null
+    } catch (e) {
+      console.error('[CSDN] _uploadViaContentScript error:', e.message)
+      return null
+    }
   }
 
   async uploadFile(file) {
+    console.log('[CSDN] uploadFile called for:', file.name || file.src)
+
+    // Strategy 1: Try content script upload (most reliable, same-origin)
     try {
-      // Fix: Use this.requestUpload
+      console.log('[CSDN] Trying content script upload strategy...')
+      const contentResult = await this._uploadViaContentScript(file)
+      if (contentResult) {
+        console.log('[CSDN] Content script upload succeeded')
+        return contentResult
+      }
+      console.log('[CSDN] Content script upload returned null, trying fallback')
+    } catch (e) {
+      console.warn('[CSDN] Content script strategy failed:', e.message)
+    }
+
+    // Strategy 2: Direct upload from Service Worker
+    try {
       const uploadData = await this.requestUpload(file.name || 'image.png')
 
-      // Check if we got valid upload credentials
+      // If no upload credentials, fallback to original URL immediately
       if (!uploadData || !uploadData.host || !uploadData.filePath) {
-        console.warn(
-          '[CSDN] No valid upload credentials, using original image URL'
-        )
-        // Return original URL if available
-        if (file.src) {
+        if (file.src && file.src.startsWith('http')) {
+          console.warn(
+            '[CSDN] No upload credentials, using original URL:',
+            file.src
+          )
           return [{ url: file.src }]
         }
-        throw new Error('Failed to get upload credentials and no fallback URL')
+        throw new Error('No upload credentials and no fallback URL available')
       }
 
-      const uploadUrl = uploadData.host
+      // Ensure host has protocol
+      let uploadUrl = uploadData.host
+      if (!uploadUrl.startsWith('http')) {
+        uploadUrl = 'https://' + uploadUrl
+      }
+
       const form = new FormData()
+      // Order is important for some OSS versions: file should be last
       form.append('key', uploadData.filePath)
       form.append('policy', uploadData.policy)
       form.append('OSSAccessKeyId', uploadData.accessId)
       form.append('success_action_status', '200')
       form.append('signature', uploadData.signature)
-      form.append('callback', uploadData.callbackUrl)
+      if (uploadData.callbackUrl) {
+        form.append('callback', uploadData.callbackUrl)
+      }
 
       const blob = new Blob([file.bits], { type: file.type })
       form.append('file', blob, file.name || 'image.png')
 
-      // Fix: Use fetch instead of axios, ensure cookies are included
+      console.log('[CSDN] Uploading to OSS:', uploadUrl)
+
+      // IMPORTANT: Do NOT use credentials: 'include' for OSS direct uploads
+      // as it might trigger CORS issues and OSS doesn't need CSDN cookies.
       var res = await fetch(uploadUrl, {
         method: 'POST',
-        credentials: 'include',
         body: form,
       })
 
-      const result = await res.json()
-      if (result.code !== 200 && result.code !== 0) {
-        throw new Error(`Image upload failed: ${result.msg || 'Unknown error'}`)
+      if (!res.ok) {
+        const errorText = await res.text()
+        throw new Error(`OSS upload failed: ${res.status} ${errorText}`)
       }
 
-      var imageUrl = result.data && result.data.imageUrl
-      if (!imageUrl && file.src) {
-        console.warn('[CSDN] No image URL in response, using original')
-        return [{ url: file.src }]
+      const result = await res.json()
+      console.log('[CSDN] OSS upload result:', result)
+
+      if (result.code !== 200 && result.code !== 0) {
+        throw new Error(`Image processing failed: ${result.msg || 'Unknown'}`)
+      }
+
+      const imageUrl = result.data && result.data.imageUrl
+      if (!imageUrl) {
+        throw new Error('No image URL returned in final response')
       }
 
       return [{ url: imageUrl }]
     } catch (error) {
-      console.error('[CSDN] Image upload failed:', error)
-      // Fallback to original URL if available
-      if (file.src) {
-        console.warn('[CSDN] Falling back to original image URL:', file.src)
+      console.error('[CSDN] uploadFile error:', error)
+      // Fallback to original URL if available and it's a remote URL
+      if (file.src && file.src.startsWith('http')) {
+        console.warn('[CSDN] Falling back to original URL:', file.src)
         return [{ url: file.src }]
       }
       throw new Error(`CSDN image upload failed: ${error.message}`)
