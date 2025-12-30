@@ -5,11 +5,22 @@
     "action": {
       "type": "modifyHeaders",
       "requestHeaders": [
-        { "header": "Origin", "operation": "set", "value": "https://mp.weixin.qq.com" },
-        { "header": "Referer", "operation": "set", "value": "https://mp.weixin.qq.com/cgi-bin/appmsg" }
+        {
+          "header": "Origin",
+          "operation": "set",
+          "value": "https://mp.weixin.qq.com"
+        },
+        {
+          "header": "Referer",
+          "operation": "set",
+          "value": "https://mp.weixin.qq.com/cgi-bin/appmsg"
+        }
       ]
     },
-    "condition": { "urlFilter": "mp.weixin.qq.com/cgi-bin", "resourceTypes": ["xmlhttprequest"] }
+    "condition": {
+      "urlFilter": "mp.weixin.qq.com/cgi-bin",
+      "resourceTypes": ["xmlhttprequest"]
+    }
   },
   {
     "id": 2,
@@ -17,11 +28,22 @@
     "action": {
       "type": "modifyHeaders",
       "requestHeaders": [
-        { "header": "Origin", "operation": "set", "value": "https://mp.toutiao.com" },
-        { "header": "Referer", "operation": "set", "value": "https://mp.toutiao.com/profile_v4/graphic/publish" }
+        {
+          "header": "Origin",
+          "operation": "set",
+          "value": "https://mp.toutiao.com"
+        },
+        {
+          "header": "Referer",
+          "operation": "set",
+          "value": "https://mp.toutiao.com/profile_v4/graphic/publish"
+        }
       ]
     },
-    "condition": { "urlFilter": "mp.toutiao.com/mp", "resourceTypes": ["xmlhttprequest"] }
+    "condition": {
+      "urlFilter": "mp.toutiao.com/mp",
+      "resourceTypes": ["xmlhttprequest"]
+    }
   },
   {
     "id": 3,
@@ -29,11 +51,22 @@
     "action": {
       "type": "modifyHeaders",
       "requestHeaders": [
-        { "header": "Origin", "operation": "set", "value": "https://card.weibo.com" },
-        { "header": "Referer", "operation": "set", "value": "https://card.weibo.com/article/v3/editor" }
+        {
+          "header": "Origin",
+          "operation": "set",
+          "value": "https://card.weibo.com"
+        },
+        {
+          "header": "Referer",
+          "operation": "set",
+          "value": "https://card.weibo.com/article/v3/editor"
+        }
       ]
     },
-    "condition": { "urlFilter": "https://card.weibo.com/article/v3", "resourceTypes": ["xmlhttprequest"] }
+    "condition": {
+      "urlFilter": "https://card.weibo.com/article/v3",
+      "resourceTypes": ["xmlhttprequest"]
+    }
   },
   {
     "id": 4,
@@ -41,9 +74,103 @@
     "action": {
       "type": "modifyHeaders",
       "requestHeaders": [
-        { "header": "Origin", "operation": "set", "value": "https://member.bilibili.com" }
+        {
+          "header": "Origin",
+          "operation": "set",
+          "value": "https://member.bilibili.com"
+        }
       ]
     },
-    "condition": { "urlFilter": "https://api.bilibili.com/x/article/creative/draft/addupdate", "resourceTypes": ["xmlhttprequest"] }
+    "condition": {
+      "urlFilter": "https://api.bilibili.com/x/article/creative/draft/addupdate",
+      "resourceTypes": ["xmlhttprequest"]
+    }
+  },
+  {
+    "id": 5,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        {
+          "header": "Origin",
+          "operation": "set",
+          "value": "https://editor.csdn.net"
+        },
+        {
+          "header": "Referer",
+          "operation": "set",
+          "value": "https://editor.csdn.net/"
+        }
+      ]
+    },
+    "condition": {
+      "urlFilter": "bizapi.csdn.net/",
+      "resourceTypes": ["xmlhttprequest", "other"],
+      "excludedInitiatorDomains": [
+        "csdn.net",
+        "editor.csdn.net",
+        "mp.csdn.net",
+        "blog.csdn.net"
+      ]
+    }
+  },
+  {
+    "id": 6,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        {
+          "header": "Origin",
+          "operation": "set",
+          "value": "https://blog.csdn.net"
+        },
+        {
+          "header": "Referer",
+          "operation": "set",
+          "value": "https://blog.csdn.net/"
+        }
+      ]
+    },
+    "condition": {
+      "urlFilter": "g-api.csdn.net/",
+      "resourceTypes": ["xmlhttprequest", "other"],
+      "excludedInitiatorDomains": [
+        "csdn.net",
+        "editor.csdn.net",
+        "mp.csdn.net",
+        "blog.csdn.net"
+      ]
+    }
+  },
+  {
+    "id": 7,
+    "priority": 1,
+    "action": {
+      "type": "modifyHeaders",
+      "requestHeaders": [
+        {
+          "header": "Origin",
+          "operation": "set",
+          "value": "https://editor.csdn.net"
+        },
+        {
+          "header": "Referer",
+          "operation": "set",
+          "value": "https://editor.csdn.net/"
+        }
+      ]
+    },
+    "condition": {
+      "urlFilter": "imgservice.csdn.net/",
+      "resourceTypes": ["xmlhttprequest", "other"],
+      "excludedInitiatorDomains": [
+        "csdn.net",
+        "editor.csdn.net",
+        "mp.csdn.net",
+        "blog.csdn.net"
+      ]
+    }
   }
 ]

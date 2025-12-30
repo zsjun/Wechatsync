@@ -59,6 +59,11 @@ export async function modifyRequestHeaders(
   // URL observation should be done via fetch wrappers or other explicit APIs.
   // Most of these calls are API requests; keep scope tight.
   const resourceTypes = ['xmlhttprequest', 'other']
+  
+  // Exclude requests from CSDN domains so we don't break CSDN's own editor
+  const excludedInitiatorDomains = urlPrefix.includes('csdn.net') 
+    ? ['csdn.net', 'editor.csdn.net', 'mp.csdn.net', 'blog.csdn.net']
+    : []
 
   try {
     console.log('[mv3] modifyRequestHeaders start', {
@@ -71,6 +76,16 @@ export async function modifyRequestHeaders(
       value,
     }))
 
+    const condition = {
+      urlFilter: urlPrefix,
+      resourceTypes,
+    }
+    
+    // Only add excludedInitiatorDomains if we have any
+    if (excludedInitiatorDomains.length > 0) {
+      condition.excludedInitiatorDomains = excludedInitiatorDomains
+    }
+
     const rule = {
       id: ruleId,
       priority: 1,
@@ -78,10 +93,7 @@ export async function modifyRequestHeaders(
         type: 'modifyHeaders',
         requestHeaders,
       },
-      condition: {
-        urlFilter: urlPrefix,
-        resourceTypes,
-      },
+      condition,
     }
 
     const updateDetails = {

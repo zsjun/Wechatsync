@@ -8,22 +8,57 @@ function createUuid() {
   })
 }
 
-function signCSDN(apiPath, contentType = 'application/json') {
+// Helper function to convert ArrayBuffer to Base64
+function arrayBufferToBase64(buffer) {
+  var bytes = new Uint8Array(buffer)
+  var binary = ''
+  for (var i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  return btoa(binary)
+}
+
+// Async sign function using Web Crypto API (works in Service Workers)
+async function signCSDN(apiPath, contentType = 'application/json') {
   var once = createUuid()
-  var signStr = `POST
-*/*
+  var accept = 'application/json, text/plain, */*'
 
-application/json
+  // Build signature string with explicit newlines
+  var signStr = [
+    'POST',
+    accept,
+    '', // Content-MD5
+    contentType,
+    '', // Date
+    'x-ca-key:203803574',
+    'x-ca-nonce:' + once,
+    apiPath,
+  ].join('\n')
 
-x-ca-key:203803574
-x-ca-nonce:${once}
-${apiPath}`
-  var hash = CryptoJS.HmacSHA256(signStr, '9znpamsyl2c7cdrr9sas0le9vbc3r6ba')
-  var hashInBase64 = CryptoJS.enc.Base64.stringify(hash)
+  console.log('[CSDN] signStr:', JSON.stringify(signStr))
+
+  // Use Web Crypto API for HMAC-SHA256
+  var encoder = new TextEncoder()
+  var keyData = encoder.encode('9znpamsyl2c7cdrr9sas0le9vbc3r6ba')
+  var messageData = encoder.encode(signStr)
+
+  var cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    keyData,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  )
+
+  var signature = await crypto.subtle.sign('HMAC', cryptoKey, messageData)
+  var hashInBase64 = arrayBufferToBase64(signature)
+
+  console.log('[CSDN] signature:', hashInBase64)
+
   return {
-    accept: '*/*',
-    'content-type': contentType,
-    'x-ca-key': 203803574,
+    Accept: accept,
+    'Content-Type': contentType,
+    'x-ca-key': '203803574',
     'x-ca-nonce': once,
     'x-ca-signature': hashInBase64,
     'x-ca-signature-headers': 'x-ca-key,x-ca-nonce',
@@ -53,267 +88,445 @@ export default class CSDNAdapter {
       },
       ['*://bizapi.csdn.net/*']
     )
+    modifyRequestHeaders(
+      'imgservice.csdn.net/',
+      {
+        Origin: 'https://editor.csdn.net',
+        Referer: 'https://editor.csdn.net/',
+      },
+      ['*://imgservice.csdn.net/*']
+    )
   }
 
   async getMetaData() {
+    console.log('[CSDN] getMetaData starting...')
+
+    // Strategy 1: Use g-api.csdn.net toolbar API (primary method)
     try {
-      // Strategy 1: Try API first
-      var res = await $.get('https://me.csdn.net/api/user/show')
-      if (res && res.data && res.data.username && res.data.csdnid) {
-        return {
-          uid: res.data.csdnid,
-          title: res.data.username,
-          avatar: res.data.avatarurl,
-          type: 'csdn',
-          displayName: 'CSDN',
-          supportTypes: ['markdown', 'html'],
-          home: 'https://mp.csdn.net/',
-          icon: 'https://g.csdnimg.cn/static/logo/favicon32.ico',
+      console.log(
+        '[CSDN] Trying toolbar API: https://g-api.csdn.net/community/toolbar-api/v1/get-user-info'
+      )
+      var res = await fetch(
+        'https://g-api.csdn.net/community/toolbar-api/v1/get-user-info',
+        {
+          method: 'GET',
+          credentials: 'include',
+          headers: {
+            accept: 'application/json, text/javascript, */*; q=0.01',
+            'content-type': 'application/x-www-form-urlencoded; charset=utf-8',
+          },
+        }
+      )
+      var data = await res.json()
+      console.log('[CSDN] Toolbar API response:', data)
+
+      if (data && data.code === 200 && data.data) {
+        var userInfo = data.data
+        var avatar =
+          userInfo.avatarUrl || userInfo.avatar || userInfo.headPic || ''
+
+        // Try to get userId from various fields
+        var userId = userInfo.username || userInfo.userId || userInfo.csdnId
+
+        // If no userId, try to extract from avatar URL
+        // Avatar URL format: https://i-avatar.csdnimg.cn/xxx_username.jpg!1
+        if (!userId && avatar) {
+          var avatarMatch = avatar.match(
+            /_([a-zA-Z0-9_-]+)\.(jpg|png|jpeg|gif)/
+          )
+          if (avatarMatch && avatarMatch[1]) {
+            userId = avatarMatch[1]
+            console.log('[CSDN] Extracted userId from avatar URL:', userId)
+          }
+        }
+
+        var username =
+          userInfo.nickname || userInfo.nickName || userInfo.username || userId
+
+        if (userId || username) {
+          console.log(
+            '[CSDN] Toolbar API success, user:',
+            username,
+            'uid:',
+            userId
+          )
+          return {
+            uid: userId || username,
+            title: username || userId,
+            avatar: avatar,
+            type: 'csdn',
+            displayName: 'CSDN',
+            supportTypes: ['markdown', 'html'],
+            home: 'https://mp.csdn.net/',
+            icon: 'https://g.csdnimg.cn/static/logo/favicon32.ico',
+          }
         }
       }
-    } catch (e) {
-      console.warn(
-        '[CSDN] API call failed, trying HTML extraction:',
-        e.message || e
-      )
-    }
 
-    // Strategy 2: Extract from blog page HTML
-    try {
-      var blogUrl = null
-
-      // Try to fetch www.csdn.net and see if we can extract blog URL or username
-      try {
-        var homePageResponse = await fetch('https://www.csdn.net/', {
-          credentials: 'include',
-        })
-        var homePageText = await homePageResponse.text()
-        var $home = $(homePageText)
-
-        // Try to find blog link or username in the page
-        var blogLink = $home.find('a[href*="blog.csdn.net"]').first()
-        if (blogLink.length > 0) {
-          var href = blogLink.attr('href')
-          if (href) {
-            var urlMatch = href.match(/blog\.csdn\.net\/([^\/\?]+)/)
-            if (urlMatch && urlMatch[1]) {
-              blogUrl = 'https://blog.csdn.net/' + urlMatch[1]
-            }
-          }
-        }
-
-        // Also try to extract username directly from homepage if available
-        var nameDiv = $home.find('.user-profile-head-name')
-        if (nameDiv.length > 0) {
-          var firstDiv = nameDiv.find('div:first-child')
-          if (firstDiv.length > 0) {
-            var username = firstDiv.text().trim()
-            if (username) {
-              // Try to get avatar
-              var avatar = ''
-              var avatarImg = $home
-                .find(
-                  '.user-profile-head-avatar img, .user-profile-head img, [class*="avatar"] img'
-                )
-                .first()
-              if (avatarImg.length > 0) {
-                avatar = avatarImg.attr('src') || ''
-              }
-
-              // Try to get user ID from URL or use username
-              var userId = username
-
-              return {
-                uid: userId,
-                title: username,
-                avatar: avatar,
-                type: 'csdn',
-                displayName: 'CSDN',
-                supportTypes: ['markdown', 'html'],
-                home: 'https://mp.csdn.net/',
-                icon: 'https://g.csdnimg.cn/static/logo/favicon32.ico',
-              }
-            }
-          }
-        }
-      } catch (e) {
+      // If code is not 200 or data is empty, user might not be logged in
+      if (data && data.code !== 200) {
         console.warn(
-          '[CSDN] Failed to fetch/parse www.csdn.net:',
-          e.message || e
+          '[CSDN] Toolbar API returned error code:',
+          data.code,
+          data.msg || data.message
         )
       }
-
-      // If we have blogUrl, fetch and parse it
-      if (blogUrl) {
-        console.log('[CSDN] Fetching blog page:', blogUrl)
-        var blogPageResponse = await fetch(blogUrl, { credentials: 'include' })
-        var blogPageText = await blogPageResponse.text()
-        var $blog = $(blogPageText)
-
-        // Extract from .user-profile-head-name > div:first-child
-        var nameDiv = $blog.find('.user-profile-head-name')
-        if (nameDiv.length > 0) {
-          var firstDiv = nameDiv.find('div:first-child')
-          if (firstDiv.length > 0) {
-            var username = firstDiv.text().trim()
-            if (username) {
-              // Try to get avatar
-              var avatar = ''
-              var avatarImg = $blog
-                .find(
-                  '.user-profile-head-avatar img, .user-profile-head img, [class*="avatar"] img'
-                )
-                .first()
-              if (avatarImg.length > 0) {
-                avatar = avatarImg.attr('src') || ''
-              }
-
-              // Extract user ID from URL
-              var userId = null
-              var urlMatch = blogUrl.match(/blog\.csdn\.net\/([^\/\?]+)/)
-              if (urlMatch && urlMatch[1]) {
-                userId = urlMatch[1]
-              } else {
-                userId = username
-              }
-
-              return {
-                uid: userId,
-                title: username,
-                avatar: avatar,
-                type: 'csdn',
-                displayName: 'CSDN',
-                supportTypes: ['markdown', 'html'],
-                home: 'https://mp.csdn.net/',
-                icon: 'https://g.csdnimg.cn/static/logo/favicon32.ico',
-              }
-            }
-          }
-        }
-      }
     } catch (e) {
-      console.error('[CSDN] HTML extraction failed:', e.message || e)
+      console.warn('[CSDN] Toolbar API failed:', e.message || e)
     }
 
-    // If all strategies fail, throw an error
-    throw new Error('无法获取CSDN用户信息，请确保已登录CSDN并访问过博客页面')
+    // All strategies failed
+    console.error('[CSDN] All detection strategies failed')
+    throw new Error(
+      'Unable to detect CSDN account. Please ensure:\n' +
+        '1. You are logged in to CSDN (https://www.csdn.net/)\n' +
+        '2. Try visiting https://blog.csdn.net/ first\n' +
+        '3. If still failing, use "Add Account" to manually add CSDN'
+    )
   }
 
   async requestUpload(filename) {
     const api =
       'https://imgservice.csdn.net/direct/v1.0/image/upload?watermark=&type=blog&rtype=markdown'
-    const fileExt = file.name.split('.').pop()
+    // Fix: Use parameter filename instead of undefined file
+    const fileExt = filename.split('.').pop()
     if (!validateFileExt(fileExt)) {
-      return null
+      throw new Error(`Unsupported file type: ${fileExt}`)
     }
 
-    var res = await axios({
+    // Fix: Use $.ajax instead of axios, which automatically includes cookies
+    var res = await $.ajax({
       url: api,
-      method: 'get',
+      type: 'GET',
+      dataType: 'json',
       headers: {
         'x-image-app': 'direct_blog',
         'x-image-suffix': fileExt,
         'x-image-dir': 'direct',
       },
     })
-    if (res.status !== 200 || res.data.code !== 200) {
-      console.log(res)
-      return null
+
+    console.log('[CSDN] requestUpload response:', JSON.stringify(res))
+
+    if (!res || typeof res === 'string') {
+      throw new Error(
+        `Failed to get upload credentials: ${res || 'Empty response'}`
+      )
     }
-    return res.data.data
+
+    // Handle both code: 200 and code: 0 as success (different APIs use different conventions)
+    if (res.code !== 200 && res.code !== 0) {
+      throw new Error(
+        `Failed to get upload credentials: ${
+          res.msg || res.message || 'Unknown error'
+        } (code: ${res.code})`
+      )
+    }
+
+    // Return data if present, otherwise return the response itself
+    return res.data || res
   }
 
   async uploadFile(file) {
-    const uploadData = await requestUpload(file.name)
-    if (!uploadData) {
-      return [{ url: file.src }]
+    try {
+      // Fix: Use this.requestUpload
+      const uploadData = await this.requestUpload(file.name || 'image.png')
+
+      // Check if we got valid upload credentials
+      if (!uploadData || !uploadData.host || !uploadData.filePath) {
+        console.warn(
+          '[CSDN] No valid upload credentials, using original image URL'
+        )
+        // Return original URL if available
+        if (file.src) {
+          return [{ url: file.src }]
+        }
+        throw new Error('Failed to get upload credentials and no fallback URL')
+      }
+
+      const uploadUrl = uploadData.host
+      const form = new FormData()
+      form.append('key', uploadData.filePath)
+      form.append('policy', uploadData.policy)
+      form.append('OSSAccessKeyId', uploadData.accessId)
+      form.append('success_action_status', '200')
+      form.append('signature', uploadData.signature)
+      form.append('callback', uploadData.callbackUrl)
+
+      const blob = new Blob([file.bits], { type: file.type })
+      form.append('file', blob, file.name || 'image.png')
+
+      // Fix: Use fetch instead of axios, ensure cookies are included
+      var res = await fetch(uploadUrl, {
+        method: 'POST',
+        credentials: 'include',
+        body: form,
+      })
+
+      const result = await res.json()
+      if (result.code !== 200 && result.code !== 0) {
+        throw new Error(`Image upload failed: ${result.msg || 'Unknown error'}`)
+      }
+
+      var imageUrl = result.data && result.data.imageUrl
+      if (!imageUrl && file.src) {
+        console.warn('[CSDN] No image URL in response, using original')
+        return [{ url: file.src }]
+      }
+
+      return [{ url: imageUrl }]
+    } catch (error) {
+      console.error('[CSDN] Image upload failed:', error)
+      // Fallback to original URL if available
+      if (file.src) {
+        console.warn('[CSDN] Falling back to original image URL:', file.src)
+        return [{ url: file.src }]
+      }
+      throw new Error(`CSDN image upload failed: ${error.message}`)
     }
-
-    const uploadUrl = uploadData.host
-    const form = new FormData()
-    form.append('key', uploadData.filePath)
-    form.append('policy', uploadData.policy)
-    form.append('OSSAccessKeyId', uploadData.accessId)
-    form.append('success_action_status', '200')
-    form.append('signature', uploadData.signature)
-    form.append('callback', uploadData.callbackUrl)
-
-    const f = new File([file.bits], 'temp', {
-      type: file.type,
-    })
-    form.append('file', f)
-
-    var res = await axios({
-      url: uploadUrl,
-      method: 'post',
-      data: form,
-    })
-    if (res.status !== 200 || res.data.code !== 200) {
-      console.log(res)
-      return [{ url: file.src }]
-    }
-    return [{ url: res.data.data.imageUrl }]
   }
 
   async addPost(post) {
-    return {
-      status: 'success',
-      post_id: 0,
-    }
-  }
-  async editPost(post_id, post) {
-    // 支持HTML
-    if (!post.markdown) {
-      var turndownService = new turndown()
-      turndownService.use(tools.turndownExt)
-      var markdown = turndownService.turndown(post.post_content)
-      console.log(markdown)
-      post.markdown = markdown
+    // Implementation: Use same API as editPost to create new article
+    // Convert HTML to Markdown if needed (with Service Worker fallback)
+    var markdownContent = post.markdown || ''
+    if (!markdownContent && post.post_content) {
+      try {
+        // Try using turndown if available and DOM is accessible
+        var turndownService = new turndown()
+        if (tools && tools.turndownExt) {
+          turndownService.use(tools.turndownExt)
+        }
+        markdownContent = turndownService.turndown(post.post_content)
+      } catch (e) {
+        console.warn(
+          '[CSDN] turndown failed (Service Worker), using HTML content:',
+          e.message
+        )
+        // Fallback: use HTML content directly or strip tags for markdown
+        markdownContent = post.post_content
+      }
     }
 
+    // Ensure content is HTML
+    var contentHtml = post.post_content || post.content || ''
+
     var postStruct = {
-      content: post.post_content,
-      markdowncontent: post.markdown,
+      content: contentHtml, // Ensure this is HTML
+      markdowncontent: markdownContent,
       not_auto_saved: '1',
       readType: 'public',
       source: 'pc_mdeditor',
-      status: 2,
+      status: 2, // 2=draft
       title: post.post_title,
+      type: 'original',
+      categories: '',
+      tags: post.post_tags || '',
+      description: post.post_digest || '',
     }
-    var headers = signCSDN('/blog-console-api/v3/mdeditor/saveArticle')
-    var res = await axios.post(
-      'https://bizapi.csdn.net/blog-console-api/v3/mdeditor/saveArticle',
-      postStruct,
-      {
+
+    var headers = await signCSDN('/blog-console-api/v3/mdeditor/saveArticle')
+    console.log('[CSDN] addPost sending:', {
+      title: postStruct.title,
+      contentLen: contentHtml.length,
+    })
+
+    var res
+    try {
+      // Pass postStruct directly; runtime.js will handle JSON.stringify
+      res = await $.ajax({
+        url: 'https://bizapi.csdn.net/blog-console-api/v3/mdeditor/saveArticle',
+        type: 'POST',
+        dataType: 'json',
+        contentType: 'application/json',
+        data: postStruct,
         headers: headers,
+      })
+    } catch (ajaxError) {
+      console.error('[CSDN] addPost ajax error:', ajaxError)
+      // $.ajax throws on HTTP errors, extract response if available
+      if (ajaxError.responseJSON) {
+        res = ajaxError.responseJSON
+      } else if (ajaxError.responseText) {
+        try {
+          res = JSON.parse(ajaxError.responseText)
+        } catch (e) {
+          throw new Error(
+            `CSDN API error: ${ajaxError.status} ${
+              ajaxError.statusText || ajaxError.responseText
+            }`
+          )
+        }
+      } else {
+        throw new Error(
+          `CSDN API request failed: ${
+            ajaxError.message || ajaxError.statusText || 'Network error'
+          }`
+        )
       }
-    )
-    post_id = res.data.data.id
-    console.log(res)
+    }
+
+    console.log('[CSDN] addPost response:', JSON.stringify(res))
+
+    // Handle different response structures
+    var code =
+      res.code !== undefined
+        ? res.code
+        : res.status !== undefined
+        ? res.status
+        : null
+    var msg = res.msg || res.message || res.error || ''
+    var data = res.data || res
+
+    if (code !== 200 && code !== 0 && code !== null) {
+      if (code === 401 || code === 403) {
+        throw new Error('CSDN session expired, please login again')
+      }
+      throw new Error(
+        `Failed to create article: ${msg || 'Unknown error'} (code: ${code})`
+      )
+    }
+
+    // Check if we got an article ID
+    var articleId = data.id || data.articleId || data.article_id
+    if (!articleId && res.id) {
+      articleId = res.id
+    }
+
+    if (!articleId) {
+      console.warn('[CSDN] No article ID in response, full response:', res)
+      throw new Error(
+        `CSDN did not return article ID. Response: ${JSON.stringify(res).slice(
+          0,
+          200
+        )}`
+      )
+    }
+
     return {
       status: 'success',
-      post_id: post_id,
-      draftLink: 'https://editor.csdn.net/md?articleId=' + post_id,
+      post_id: articleId,
+      draftLink: 'https://editor.csdn.net/md?articleId=' + articleId,
+    }
+  }
+
+  async editPost(post_id, post) {
+    // Convert HTML to Markdown if needed (with Service Worker fallback)
+    var markdownContent = post.markdown || ''
+    if (!markdownContent && post.post_content) {
+      try {
+        var turndownService = new turndown()
+        if (tools && tools.turndownExt) {
+          turndownService.use(tools.turndownExt)
+        }
+        markdownContent = turndownService.turndown(post.post_content)
+      } catch (e) {
+        console.warn(
+          '[CSDN] turndown failed (Service Worker), using HTML content:',
+          e.message
+        )
+        markdownContent = post.post_content
+      }
+    }
+
+    // Ensure content is HTML
+    var contentHtml = post.post_content || post.content || ''
+
+    var postStruct = {
+      id: post_id, // Include article ID for editing
+      content: contentHtml, // Ensure this is HTML
+      markdowncontent: markdownContent,
+      not_auto_saved: '1',
+      readType: 'public',
+      source: 'pc_mdeditor',
+      status: 2, // 2=draft
+      title: post.post_title,
+      type: 'original',
+      categories: '',
+      tags: post.post_tags || '',
+      description: post.post_digest || '',
+    }
+
+    var headers = await signCSDN('/blog-console-api/v3/mdeditor/saveArticle')
+    console.log('[CSDN] editPost sending:', {
+      id: post_id,
+      title: postStruct.title,
+      contentLen: contentHtml.length,
+    })
+
+    // Pass postStruct directly; runtime.js will handle JSON.stringify
+    var res = await $.ajax({
+      url: 'https://bizapi.csdn.net/blog-console-api/v3/mdeditor/saveArticle',
+      type: 'POST',
+      dataType: 'json',
+      contentType: 'application/json',
+      data: postStruct,
+      headers: headers,
+    })
+
+    console.log('[CSDN] editPost response:', res)
+
+    if (res.code !== 200) {
+      if (res.code === 401 || res.code === 403) {
+        throw new Error('CSDN session expired, please login again')
+      } else if (res.code === 400) {
+        throw new Error(
+          `Invalid request parameters: ${res.msg || 'Unknown error'}`
+        )
+      } else {
+        throw new Error(
+          `Failed to save: ${res.msg || 'Unknown error'} (code: ${res.code})`
+        )
+      }
+    }
+
+    var articleId = res.data.id || res.data.articleId || post_id
+    return {
+      status: 'success',
+      post_id: articleId,
+      draftLink: 'https://editor.csdn.net/md?articleId=' + articleId,
     }
   }
 
   async preEditPost(post) {
-    var div = $('<div>')
-    $('body').append(div)
+    // Note: In Service Worker context, DOM APIs are not available
+    // Use cheerio for HTML manipulation instead
     try {
-      div.html(post.content)
-      var doc = div
-      tools.processDocCode(div)
-      tools.makeImgVisible(div)
-      var tempDoc = $('<div>').append(doc.clone())
-      post.content =
-        tempDoc.children('div').length == 1
-          ? tempDoc.children('div').html()
-          : tempDoc.html()
+      // Check if we have the tools and cheerio-compatible $
+      if (typeof $ === 'function' && post.content) {
+        var $doc = $(post.content)
 
-      console.log('after.predEdit', post.content)
+        // Only process if $ returned a valid cheerio object with html method
+        if ($doc && typeof $doc.html === 'function') {
+          // Try to process code blocks if tools is available
+          if (tools && tools.processDocCode) {
+            try {
+              tools.processDocCode($doc)
+            } catch (e) {
+              console.log('[CSDN] processDocCode skipped:', e.message)
+            }
+          }
+
+          // Try to make images visible if tools is available
+          if (tools && tools.makeImgVisible) {
+            try {
+              tools.makeImgVisible($doc)
+            } catch (e) {
+              console.log('[CSDN] makeImgVisible skipped:', e.message)
+            }
+          }
+
+          // Get processed HTML
+          var processedHtml = $doc.html()
+          if (processedHtml) {
+            post.content = processedHtml
+          }
+        }
+      }
+      console.log('[CSDN] preEditPost done')
     } catch (e) {
-      console.log('preEdit.error', e)
+      console.log('[CSDN] preEditPost error:', e.message || e)
+      // Continue with original content if processing fails
     }
   }
 }

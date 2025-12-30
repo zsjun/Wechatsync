@@ -179,12 +179,12 @@ export default {
           icon: 'https://juejin.cn/favicon.ico',
           name: '掘金',
         },
-        // {
-        //   type: 'csdn',
-        //   home: 'https://i.csdn.net',
-        //   icon: 'https://csdnimg.cn/public/favicon.ico',
-        //   name: 'CSDN',
-        // },
+        {
+          type: 'csdn',
+          home: 'https://mp.csdn.net/',
+          icon: 'https://g.csdnimg.cn/static/logo/favicon32.ico',
+          name: 'CSDN',
+        },
         // {
         //   type: 'segmentfault',
         //   home: 'https://segmentfault.com/user/draft',
